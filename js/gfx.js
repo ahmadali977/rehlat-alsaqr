@@ -32,11 +32,18 @@ export function resize() {
   gfx.renderer.setSize(w, h, false);
   gfx.renderer.domElement.style.width = w + 'px';
   gfx.renderer.domElement.style.height = h + 'px';
+  if (gfx.post) { gfx.post.composer.setPixelRatio(gfx.renderer.getPixelRatio()); gfx.post.composer.setSize(w, h); }
   gfx.camera.aspect = w / h;
   // keep the horizontal framing on tall/narrow screens
   gfx.camera.fov = gfx.camera.aspect < 1.6 ? 40 * (1.6 / gfx.camera.aspect) ** 0.75 : 40;
   gfx.camera.updateProjectionMatrix();
   window.dispatchEvent(new Event('stage-resize'));
+}
+
+// draw a frame (single place to add post effects later)
+export function renderFrame(scene, camera) {
+  if (gfx.post) { gfx.post.pass.scene = scene; gfx.post.pass.camera = camera; gfx.post.composer.render(); }
+  else gfx.renderer.render(scene, camera);
 }
 
 // ---------- materials ----------
@@ -106,8 +113,10 @@ export function makeStars(count = 2500, radius = 800, opts = {}) {
 
 // ---------- mini planet ----------
 // heightFn(dir:Vector3, noise) -> displacement (world units); colorFn(dir, h, noise, out:Color)
-export function makePlanet({ radius = 10, detail = 48, seed = 1, heightFn, colorFn, rough = 0.85, flat = false }) {
+export function makePlanet({ radius = 10, detail = 48, seed = 1, heightFn: baseHeight, colorFn, rough = 0.85, flat = false, micro = 0.035, ao = 0.24, grain = 0.06, surface = { scale: 3.2, bump: 0.55, tone: 0.16 } }) {
   const noise = makeNoise(seed);
+  // fine surface bumps everywhere except the flattened pad area at the top
+  const heightFn = baseHeight && ((d, nz) => baseHeight(d, nz) + micro * nz.fbm(d.x * 18 + 5, d.y * 18, d.z * 18, 2) * THREE.MathUtils.smoothstep(Math.acos(Math.min(1, d.y)), 0.3, 0.42));
   const geo = new THREE.IcosahedronGeometry(1, detail);
   const pos = geo.attributes.position; const n = pos.count;
   const colors = new Float32Array(n * 3); const dir = new THREE.Vector3(); const c = new THREE.Color();
@@ -125,15 +134,53 @@ export function makePlanet({ radius = 10, detail = 48, seed = 1, heightFn, color
     pos.setXYZ(i, dir.x * (radius + rec[0]), dir.y * (radius + rec[0]), dir.z * (radius + rec[0]));
     colors[i * 3] = rec[1]; colors[i * 3 + 1] = rec[2]; colors[i * 3 + 2] = rec[3];
   }
+  // baked depth: hollows darker, ridges lighter, plus a little grain
+  let hMin = Infinity, hMax = -Infinity;
+  for (const r of cache.values()) { if (r[0] < hMin) hMin = r[0]; if (r[0] > hMax) hMax = r[0]; }
+  const span = Math.max(1e-3, hMax - hMin);
+  for (let i = 0; i < n; i++) {
+    dir.fromBufferAttribute(pos, i).normalize();
+    const h = Math.hypot(pos.getX(i), pos.getY(i), pos.getZ(i)) - radius; // height from the displaced position
+    const t = Math.pow(THREE.MathUtils.clamp((h - hMin) / span, 0, 1), 0.7);
+    const k = (1 - ao) + ao * 1.25 * t + grain * noise.n3(dir.x * 46, dir.y * 46, dir.z * 46);
+    colors[i * 3] *= k; colors[i * 3 + 1] *= k; colors[i * 3 + 2] *= k;
+  }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   if (flat) geo.computeVertexNormals();
   else { // smooth normals across duplicated vertices
     const merged = mergeNormals(geo); geo.setAttribute('normal', merged);
   }
-  const mesh = new THREE.Mesh(geo, mat(0xffffff, { vc: true, rough, flat, envI: 0.25 }));
+  const material = mat(0xffffff, { vc: true, rough, flat, envI: 0.25 });
+  if (surface) addSurfaceDetail(material, surface);
+  const mesh = new THREE.Mesh(geo, material);
   mesh.receiveShadow = true; mesh.castShadow = true;
   const heightAt = d => radius + (heightFn ? heightFn(d.clone().normalize(), noise) : 0);
   return { mesh, radius, noise, heightAt };
+}
+
+// Per-pixel ground detail: procedural grain on the colour and tiny bumps on the normal, so terrain reads as solid up close.
+const NOISE_GLSL = `
+varying vec3 vObjPos;
+uniform float uDetail, uBump, uTone;
+float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vn(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float fbm3(vec3 p){ return vn(p) * 0.5 + vn(p * 2.7 + 3.1) * 0.3 + vn(p * 7.3 + 7.7) * 0.2; }
+vec3 bumpN(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float fd){
+  vec3 sx = normalize(dFdx(surf_pos)); vec3 sy = normalize(dFdy(surf_pos)); vec3 r1 = cross(sy, surf_norm); vec3 r2 = cross(surf_norm, sx);
+  float det = dot(sx, r1) * fd; vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2); return normalize(abs(det) * surf_norm - grad); }
+`;
+export function addSurfaceDetail(material, { scale = 3.2, bump = 0.55, tone = 0.16 } = {}) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uDetail = { value: scale }; shader.uniforms.uBump = { value: bump }; shader.uniforms.uTone = { value: tone };
+    shader.vertexShader = 'varying vec3 vObjPos;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObjPos = position;');
+    shader.fragmentShader = NOISE_GLSL + shader.fragmentShader
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  float gDet = fbm3(vObjPos * uDetail);\n  diffuseColor.rgb *= 1.0 - uTone + uTone * 2.0 * gDet;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = bumpN(-vViewPosition, normal, vec2(dFdx(gDet), dFdy(gDet)) * uBump, faceDirection);');
+  };
+  material.customProgramCacheKey = () => 'surface-detail';
+  return material;
 }
 
 function mergeNormals(geo) {

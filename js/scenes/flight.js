@@ -12,6 +12,7 @@ import { flightHUD, PLANET_COLORS } from '../hud.js';
 import { planetMesh, nebulaTexture, glowShell } from '../textures.js';
 import { Particles } from '../particles.js';
 import { runRepair } from './repair.js';
+import { makeRock, ROCK_PALETTES, brokenSatellite, glowSprite } from '../art.js';
 
 const ROCKET_X = -5;
 const SPEED = 7;
@@ -57,7 +58,7 @@ function buildSpace(leg) {
   const dgeo = new THREE.BufferGeometry(); dgeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
   const dust = new THREE.Points(dgeo, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 0.09, transparent: true, opacity: 0.7, depthWrite: false })); scene.add(dust);
 
-  const rocket = buildRocket(); rocket.root.rotation.z = -Math.PI / 2; rocket.setHorizontal(true); rocket.setThrust(0.75);
+  const rocket = buildRocket(); rocket.root.rotation.z = -Math.PI / 2; rocket.setHorizontal(true); rocket.setThrust(0.75); rocket.setPilot(true);
   rocket.root.position.set(ROCKET_X, 0, 0); rocket.legs.visible = false;
   const rocketPivot = new THREE.Group(); rocketPivot.add(rocket.root); scene.add(rocketPivot);
   rocket.root.position.set(0, 0, 0); rocketPivot.position.set(ROCKET_X, 0, 0);
@@ -104,20 +105,17 @@ function makeObstacle(kind, leg, i) {
   const g = new THREE.Group(); const body = new THREE.Group(); g.add(body);
   g.userData.kind = kind; g.userData.radius = 1.2;
   if (kind === 'meteor') {
-    const m = model(i % 2 ? 'meteorD' : 'meteor', { height: 2.0, fit: 'max' });
-    m.traverse(o => { if (o.isMesh) o.material.color.set(['#9a7b66', '#8a8f9e', '#a0694a'][i % 3]); });
-    const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()); m.position.sub(c);
-    body.add(m); g.userData.spin = [0.6, 0.9, 0.3];
+    const pal = [ROCK_PALETTES.space, { colA: '#a08068', colB: '#5a4232', colC: '#c9a78a' }, { colA: '#8a8f9e', colB: '#4c505e', colC: '#b6bccb' }][(leg + i) % 3];
+    const m = makeRock(leg * 5 + i, 1.05, { ...pal, detail: 4, rough: 0.38, squash: 0.82, craters: 5 });
+    body.add(m); g.userData.spin = [0.5, 0.8, 0.25];
   } else if (kind === 'debris') {
-    const a = model('dish', { height: 1.3, fit: 'max' }), b = model('wireless', { height: 0.9, fit: 'max' }), c2 = model('rocksB', { height: 0.6, fit: 'max' });
-    a.position.set(-0.3, -0.5, 0); b.position.set(0.5, 0.2, 0.2); b.rotation.z = 1; c2.position.set(-0.4, 0.5, -0.3);
-    body.add(a, b, c2); g.userData.spin = [1.1, 0.5, 0.8];
+    const sat = brokenSatellite(); sat.scale.setScalar(1.25); body.add(sat); g.userData.spin = [0.7, 0.45, 0.6];
   } else if (kind === 'rogue') {
     const p = planetMesh(ROGUE_LOOKS[(leg + i) % ROGUE_LOOKS.length], 0.95, { segments: 48 });
     p.rotation.z = 0; body.add(p);
     g.add(grumpyFace(0.95)); g.userData.spin = [0, 0.6, 0];
   } else { // comet
-    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 2), mat('#a8dcff', { rough: 0.3, flat: true, emissive: 0x3a7cc8, emissiveI: 0.8, envI: 1.2 }));
+    const core = makeRock(31 + i, 0.82, { ...ROCK_PALETTES.ice, detail: 3, craters: 3, rough: 0.3 });
     const halo = glowShell(0.8, 0x8fd0ff, 1.2); halo.scale.setScalar(1.5); body.add(halo);
     body.add(core); g.userData.spin = [0.4, 0.7, 0.2]; g.userData.comet = true;
   }
@@ -194,12 +192,12 @@ export async function flight(leg) {
     // spawn star arcs
     if (mode === 'fly' && travelled > nextStars && travelled < total - 10) {
       const y0 = (Math.random() - 0.5) * 5, amp = 0.6 + Math.random() * 1.2, ph = Math.random() * 6;
-      for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(starGeo, starMat()); s.position.set(14 + i * 1.1, THREE.MathUtils.clamp(y0 + Math.sin(ph + i * 0.7) * amp, -3.3, 3.3), 0); w.scene.add(s); pickups.push(s); }
+      for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(starGeo, starMat()); s.add(glowSprite(0xffd35a, 1.5, 0.55)); s.userData.ph = Math.random() * 6; s.position.set(14 + i * 1.1, THREE.MathUtils.clamp(y0 + Math.sin(ph + i * 0.7) * amp, -3.3, 3.3), 0); w.scene.add(s); pickups.push(s); }
       nextStars = travelled + 18 + Math.random() * 10;
     }
     // move pickups
     for (let i = pickups.length - 1; i >= 0; i--) {
-      const s = pickups[i]; s.position.x -= dx; s.rotation.y += dt * 3;
+      const s = pickups[i]; s.position.x -= dx; s.rotation.y = Math.sin(t * 3 + s.userData.ph) * 0.5; s.rotation.z = Math.sin(t * 2 + s.userData.ph) * 0.15;
       if (Math.abs(s.position.x - rp.x) < 0.9 && Math.abs(s.position.y - rp.y) < 0.75 && mode === 'fly') {
         state.score += 10; state.stars++; hud.score(); sfx.star();
         w.fx.emit({ pos: [s.position.x, s.position.y, 0], velSpread: 4, life: 0.5, size: 0.35, sizeEnd: 0, color: 0xfff3a0, colorEnd: 0xffa000, count: 10 });
@@ -233,9 +231,9 @@ export async function flight(leg) {
     // ease to a stop, lift both into the upper half so the question panel never covers them
     tween(0.6, k => { w.speedK = 1 - k; }, ease.out);
     const oy = ob.position.y, ry = rp.y;
-    tween(0.9, k => { ob.position.y = THREE.MathUtils.lerp(oy, 1.9, k); rp.y = THREE.MathUtils.lerp(ry, 1.9, k); vy = 0; }, ease.inOut);
+    tween(0.9, k => { ob.position.y = THREE.MathUtils.lerp(oy, 1.55, k); rp.y = THREE.MathUtils.lerp(ry, 1.55, k); vy = 0; }, ease.inOut);
     const ct = w.cam.target.clone(), cp = w.cam.pos.clone();
-    w.cam.target.set(ct.x - 1.2, -1.2, 0); w.cam.pos.set(cp.x - 1.2, -0.6, 12.2);
+    w.cam.target.set(ct.x - 1.2, -0.85, 0); w.cam.pos.set(cp.x - 1.2, -0.3, 12.4);
     music.duck(0.45);
     const q = ob.userData.q;
     const ok = await showQuestion(q, { badge: `عقبة ${ar(ob.userData.idx + 1)} من ${ar(perLeg)}`, fun: !!q.fun, onAnswer: async right => {
@@ -284,11 +282,10 @@ export async function flight(leg) {
     w.smoke.emit({ pos: [c.x, c.y, c.z], velSpread: 3, life: 1.6, size: 0.8, sizeEnd: 2.2, color: 0x9a8f99, colorEnd: 0x4a4458, alpha: 0.55, count: 18, drag: 1.5 });
     const col = ob.userData.kind === 'comet' ? '#cfe9ff' : '#8f7a68';
     for (let i = 0; i < 10; i++) {
-      const ch = model(i % 2 ? 'rocksA' : 'rocksB', { height: 0.25 + Math.random() * 0.35, fit: 'max' });
-      ch.traverse(o => { if (o.isMesh) o.material.color.set(col); });
-      ch.position.copy(c); w.scene.add(ch);
+      const ch = makeRock(20 + i, 0.12 + Math.random() * 0.16, ob.userData.kind === 'comet' ? { ...ROCK_PALETTES.ice, detail: 1 } : { ...ROCK_PALETTES.space, detail: 1 });
+      ch.position.copy(c); w.scene.add(ch); const s0 = ch.scale.x;
       const v = new THREE.Vector3((Math.random() - 0.3) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 5); const sp = new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8);
-      tween(1.6, k => { ch.position.addScaledVector(v, 1 / 60); v.multiplyScalar(0.985); ch.rotation.x += sp.x / 60; ch.rotation.y += sp.y / 60; ch.scale.setScalar(Math.max(0.001, 1 - k * k)); }, ease.linear).then(() => w.scene.remove(ch));
+      tween(1.6, k => { ch.position.addScaledVector(v, 1 / 60); v.multiplyScalar(0.985); ch.rotation.x += sp.x / 60; ch.rotation.y += sp.y / 60; ch.scale.setScalar(Math.max(0.001, s0 * (1 - k * k))); }, ease.linear).then(() => w.scene.remove(ch));
     }
   }
 

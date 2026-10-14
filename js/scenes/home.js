@@ -94,12 +94,13 @@ export async function homeIntro() {
   await tween(2.4, k => { const y = 0.19 + k * 3.12; cage.position.y = y - 0.03; astro.position.copy(tower.localToWorld(V(0, y, 0))); }, ease.inOutSine);
   // 3) along the arm into the hatch
   astro.userData.play('Walk', { speed: 1.1 });
-  await tween(1.3, k => { astro.position.copy(tower.localToWorld(V(0.05 + k * 0.95, 3.31, 0))); }, ease.linear);
+  await tween(1.3, k => { astro.position.copy(tower.localToWorld(V(0.05 + k * 1.75, 3.31, 0))); }, ease.linear);
   astro.userData.play('Wave');
   await sleep(1.2);
   sfx.pop();
   await tween(0.35, k => astro.scale.setScalar(1 - k), ease.in);
   astro.visible = false;
+  rocket.setPilot(true);
   pulsePorthole(rocket);
   await sleep(0.4);
 
@@ -117,7 +118,7 @@ export async function launchSequence() {
   cam.pos.set(-4.2, R + 1.8, 9.5); cam.target.set(0, R + 2.2, 0);
   await bigButton('🚀 انطلاق!');
   // retract arms
-  tween(1.2, k => tower.userData.arms.forEach(a => { a.scale.x = 1 - k * 0.7; a.position.x = 0.72 - k * 0.35; }));
+  tween(1.2, k => tower.userData.arms.forEach(a => { a.scale.x = 1 - k * 0.7; a.position.x = 1.2 - k * 0.68; }));
   music.stop(1200);
   const base = () => rocket.root.position.clone();
   // ignition smoke while counting down

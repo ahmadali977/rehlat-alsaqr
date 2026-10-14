@@ -21,7 +21,7 @@ export async function landing(leg) {
   cam.pos.set(0.6, top + 2.6, 10.5); cam.target.set(0, top + 2.4, 0); cam.snap(); cam.lerp = 0.035;
 
   // ---- descent
-  rocket.root.visible = true; rocket.setThrust(0.8);
+  rocket.root.visible = true; rocket.setThrust(0.8); rocket.setPilot(true);
   const y1 = top - 0.02, y0 = y1 + 12;
   rocket.root.position.y = y0;
   sfx.rumbleOn(0.55);
@@ -49,7 +49,7 @@ export async function landing(leg) {
   burst(); setTimeout(burst, 700); setTimeout(burst, 1500);
   cam.pos.set(0.4, top + 3.4, 9.2); cam.target.set(0, top + 1.0, 0);
   // astronaut steps out and waves
-  const astro = w.astro; astro.visible = true; astro.position.set(-0.85, top, 0.85); astro.lookAt(base.localToWorld(V(0, top, 9))); astro.scale.setScalar(0.01);
+  const astro = w.astro; astro.visible = true; rocket.setPilot(false); astro.position.set(-0.85, top, 0.85); astro.lookAt(base.localToWorld(V(0, top, 9))); astro.scale.setScalar(0.01);
   tween(0.4, k => astro.scale.setScalar(Math.max(0.01, k)), ease.outBack); astro.userData.play('Wave');
   await banner(`أهلًا بك في ${p.name}!`, p.title, { top: 70, hold: 3000 });
 
@@ -82,7 +82,7 @@ export async function landing(leg) {
   guide.userData.play('Yes');
   cam.pos.set(0.3, top + 2.8, 10); cam.target.set(0, top + 1.6, 0);
   await sleep(0.4);
-  sfx.pop(); await tween(0.3, k => astro.scale.setScalar(Math.max(0.001, 1 - k)), ease.in); astro.visible = false;
+  sfx.pop(); await tween(0.3, k => astro.scale.setScalar(Math.max(0.001, 1 - k)), ease.in); astro.visible = false; rocket.setPilot(true);
   sfx.rumbleOn(1); rocket.setThrust(1);
   const fx2 = onFrame(() => { w.fire.emit({ pos: [0, rocket.root.position.y + 0.05, 0], vel: [0, -4, 0], velSpread: 1.5, spread: 0.2, life: 0.4, size: 0.5, sizeEnd: 0.05, color: 0xfff1b0, colorEnd: 0xff5a1f, alpha: 0.9, count: 3 }); });
   let vy = 0;

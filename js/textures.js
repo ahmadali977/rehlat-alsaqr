@@ -74,10 +74,17 @@ export function planetMesh(id, radius = 1, { segments = 64 } = {}) {
 }
 
 function ringMaterial(id) {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 8; const x = c.getContext('2d');
-  for (let i = 0; i < 512; i++) {
-    const t = i / 512; let a, col;
-    if (id === 'saturn') { a = (0.55 + 0.45 * Math.sin(t * 60) * Math.sin(t * 13 + 1)) * (t > 0.62 && t < 0.66 ? 0.1 : 1) * (t < 0.04 ? t / 0.04 : 1) * (t > 0.96 ? (1 - t) / 0.04 : 1); col = `rgba(${230 - t * 40},${210 - t * 40},${160 - t * 30},${Math.max(0, a) * 0.9})`; }
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 8; const x = c.getContext('2d');
+  for (let i = 0; i < 1024; i++) {
+    const t = i / 1024; let a, col;
+    if (id === 'saturn') {
+      // C ring (faint) | B ring (bright) | Cassini Division (gap) | A ring with the Encke gap | thin F ring
+      const fine = 0.85 + 0.15 * Math.sin(t * 310) * Math.sin(t * 97 + 2);
+      if (t < 0.18) a = 0.22 + t * 1.2; else if (t < 0.55) a = 0.95; else if (t < 0.6) a = 0.06; else if (t < 0.86) a = (t > 0.8 && t < 0.815) ? 0.15 : 0.7; else if (t > 0.93 && t < 0.95) a = 0.55; else a = 0.03;
+      a *= fine;
+      const warm = t < 0.55 ? [236, 214, 170] : [218, 200, 162];
+      col = `rgba(${warm[0]},${warm[1]},${warm[2]},${Math.max(0, Math.min(1, a))})`;
+    }
     else { a = (Math.sin(t * 40) > 0.85 ? 0.7 : 0.08); col = `rgba(200,240,240,${a})`; }
     x.fillStyle = col; x.fillRect(i, 0, 1, 8);
   }

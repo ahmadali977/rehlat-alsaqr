@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mat, gfx } from './gfx.js';
+import { glowSprite } from './art.js';
 
 const GREEN = 0x0f8a4a, GREEN_D = 0x0a6b38, WHITE = 0xf7f7f2, GOLD = 0xf2b632, STEEL = 0x8f98a8, DARK = 0x2c3140;
 
@@ -14,6 +15,24 @@ function flagTexture() {
   const g = c.getContext('2d'); g.drawImage(flagImg, 0, 0, 900, 600);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
+}
+
+function pilotTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  const bg = g.createRadialGradient(128, 110, 10, 128, 128, 128); bg.addColorStop(0, '#2b4f8a'); bg.addColorStop(1, '#0f1d3d');
+  g.fillStyle = bg; g.fillRect(0, 0, 256, 256);
+  // helmet
+  g.fillStyle = '#f4f6f8'; g.beginPath(); g.arc(128, 150, 92, 0, 7); g.fill();
+  g.fillStyle = '#12a150'; g.fillRect(36, 214, 184, 20); // green collar
+  // visor with a cheerful reflection
+  const v = g.createLinearGradient(80, 100, 180, 200); v.addColorStop(0, '#3a5f9a'); v.addColorStop(1, '#16243f');
+  g.fillStyle = v; g.beginPath(); g.ellipse(128, 150, 62, 50, 0, 0, 7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.75)'; g.beginPath(); g.ellipse(100, 128, 16, 9, -0.6, 0, 7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.4)'; g.beginPath(); g.ellipse(150, 176, 9, 5, -0.6, 0, 7); g.fill();
+  // smiling eyes behind the visor
+  g.strokeStyle = '#ffe9c9'; g.lineWidth = 7; g.lineCap = 'round';
+  for (const x of [108, 148]) { g.beginPath(); g.arc(x, 150, 9, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
 function nameTexture(text) {
@@ -69,6 +88,10 @@ export function buildRocket() {
   glass.rotation.x = Math.PI / 2; glass.scale.y = 0.35;
   port.add(ring, glass);
   port.userData.glass = glass;
+  // the pilot seen through the porthole (shown once the astronaut is aboard)
+  const pilot = new THREE.Mesh(new THREE.CircleGeometry(0.175, 40), new THREE.MeshBasicMaterial({ map: pilotTexture(), toneMapped: false }));
+  pilot.position.z = 0.032; pilot.visible = false; port.add(pilot);
+  glass.position.z = 0.03; glass.material.transparent = true; glass.material.opacity = 0.32; glass.material.envMapIntensity = 0.7; glass.material.clearcoat = 0.3; glass.material.emissiveIntensity = 0.15;
 
   // flag + name decals
   const flag = decal(0.472, 1.02, 0.5, 1.62, flagTexture());
@@ -112,6 +135,7 @@ export function buildRocket() {
 
   // flame (hidden until thrust)
   const flame = makeFlame(); flame.position.y = -0.36; body.add(flame);
+  const flameGlow = glowSprite(0xffa040, 1.7, 0); flameGlow.position.y = -0.75; body.add(flameGlow);
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   flame.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
@@ -120,7 +144,8 @@ export function buildRocket() {
   const api = {
     root, body, flame, legs, port, glow,
     thrust: 0,
-    setHorizontal(h) { flag.visible = name.visible = !h; flagH.visible = nameH.visible = h; },
+    setHorizontal(h) { flag.visible = name.visible = !h; flagH.visible = nameH.visible = h; pilot.rotation.z = h ? Math.PI / 2 : 0; },
+    setPilot(on) { pilot.visible = on; },
     setThrust(v) { api.thrust = v; },
     update(dt, t) {
       const k = api.thrust;
@@ -131,6 +156,8 @@ export function buildRocket() {
         flame.userData.mat.forEach(m => m.uniforms.time.value = t);
       }
       glow.material.opacity = Math.min(1, k * 1.4);
+      flameGlow.material.opacity = Math.min(0.75, k * 0.75);
+      flameGlow.scale.setScalar(1.2 + k * 1.1);
     },
   };
   return api;

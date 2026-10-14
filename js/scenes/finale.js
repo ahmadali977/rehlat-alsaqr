@@ -29,7 +29,7 @@ function buildFinale() {
   }
   // Pluto, the dwarf planet, waving from the Kuiper belt
   const pluto = planetMesh('mercury', 0.2, { segments: 24 }); pluto.position.set(x + 1.2, 0.6, -1); scene.add(pluto);
-  const rocket = buildRocket(); rocket.root.rotation.z = -Math.PI / 2; rocket.setHorizontal(true); rocket.legs.visible = false; rocket.setThrust(0.7);
+  const rocket = buildRocket(); rocket.root.rotation.z = -Math.PI / 2; rocket.setHorizontal(true); rocket.legs.visible = false; rocket.setThrust(0.7); rocket.setPilot(true);
   rocket.root.scale.setScalar(0.55); rocket.root.position.set(-14, 2.6, 2); scene.add(rocket.root);
   const fx = new Particles(1500, { additive: true }); scene.add(fx.points);
   const cam = makeCam(new THREE.Vector3(1.5, 2.2, 21), new THREE.Vector3(1.5, 0.3, 0)); cam.drift = 0.6; cam.snap();

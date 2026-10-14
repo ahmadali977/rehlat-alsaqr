@@ -7,6 +7,12 @@ import { makeCam } from '../game.js';
 import { Particles, Confetti } from '../particles.js';
 import { planetMesh, planetTexture } from '../textures.js';
 import { aimAxis } from './earth.js';
+import { makePad, padTexture, makeRock, ROCK_PALETTES, glowSprite } from '../art.js';
+import { PLANETS } from '../content.js';
+
+// pad accent colours per world
+const ACCENT = { mercury: '#e0703a', venus: '#d64f8f', mars: '#159a8c', jupiter: '#e07a2f', saturn: '#b8862a', uranus: '#1f9fa6', neptune: '#4f6fe0' };
+const nameOf = id => (PLANETS.find(p => p.id === id) || {}).name || '';
 
 const S = THREE.MathUtils.smoothstep, L = THREE.MathUtils.lerp, CL = THREE.MathUtils.clamp;
 const col = h => new THREE.Color(h);
@@ -21,10 +27,11 @@ function craters(d, list) {
   }
   return h;
 }
-function craterList(seed, n, rMin, rMax, depth, avoidTop = 0.38) {
+function craterList(seed, n, rMin, rMax, depth, avoidTop = 0.3, nearTop = 0) {
   const rnd = mulberry(seed); const out = [];
   while (out.length < n) {
-    const d = V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
+    // the first nearTop craters are scattered around the landing area, where the camera looks
+    const d = out.length < nearTop ? dirFrom(avoidTop + rnd() * 0.55, rnd() * 6.283) : V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
     if (Math.acos(d.y) < avoidTop) continue;
     const r = rMin + rnd() * (rMax - rMin);
     out.push({ dir: d, r, depth: depth * (0.6 + rnd() * 0.6) * (r / rMax) });
@@ -38,20 +45,24 @@ export const WORLD_DEFS = {
   mercury: {
     rocky: true, radius: 9, seed: 21,
     sky: [[0, '#2a1a3a'], [0.4, '#120c28'], [1, '#05040e']], skyLo: -0.4, skyHi: 0.6, stars: 1,
-    sun: { color: 0xfff2dc, i: 3.6, dir: [-9, 6, 5] }, hemi: [0xb4b2d0, 0x8a7a6e, 1.15],
-    bigSun: { size: 30, pos: [-170, 90, -300] },
-    craters: craterList(5, 34, 0.08, 0.32, 0.55),
+    sun: { color: 0xfff2dc, i: 1.9, dir: [-9, 5, 4] }, hemi: [0x8f8fb8, 0x5a4e46, 0.5],
+    bigSun: { size: 34, pos: [-130, 30, -280] },
+    craters: craterList(5, 50, 0.05, 0.28, 0.6, 0.3, 16),
     height(d, nz) { return flatTop(d, craters(d, this.craters) + nz.fbm(d.x * 4, d.y * 4, d.z * 4, 4) * 0.18, 0.05); },
-    color(d, h, nz, o) { o.copy(col('#a89888')).lerp(col('#776a60'), CL(-h * 1.6 + 0.3, 0, 1)); o.lerp(col('#cbbcad'), CL(nz.fbm(d.x * 6, d.y * 6, d.z * 6, 2) * 0.8, 0, 0.5)); },
-    props: [['rockA', 9, 0.35, 0.7, '#8a7c70'], ['rocksA', 14, 0.1, 0.22, '#9a8b7e'], ['meteorH', 5, 0.3, 0.5, '#7f7166'], ['dish', 1, 0.9, 0.9, null]],
+    color(d, h, nz, o) {
+      o.copy(col('#8a837c')).lerp(col('#4f4a46'), CL(-h * 1.8 + 0.25, 0, 1));
+      o.lerp(col('#b3aba2'), CL(nz.fbm(d.x * 6, d.y * 6, d.z * 6, 2) * 0.9, 0, 0.5));
+      for (const c of this.craters) { const x = d.angleTo(c.dir) / c.r; if (x > 0.95 && x < 1.6) o.lerp(col('#ddd2c4'), (1 - Math.abs(x - 1.15) / 0.45) * 0.35); } // bright crater rims and rays
+    },
+    props: [['boulder', 12, 0.3, 0.65], ['stone', 30, 0.1, 0.24], ['pebble', 60, 0.04, 0.1], ['dish', 1, 0.9, 0.9, null]], rockPal: 'mercury',
     station: true, species: 'sp_mercury', tints: ['#ffffff', '#ffc89a', '#ffe3b0'],
   },
   venus: {
     rocky: true, radius: 9, seed: 31,
     sky: [[0, '#ffd88a'], [0.35, '#f5a54a'], [0.75, '#cf7a32'], [1, '#93501f']], skyLo: -0.4, skyHi: 0.9, stars: 0,
-    sun: { color: 0xffd9a0, i: 2.2, dir: [-6, 10, 6] }, hemi: [0xffc27a, 0x9b5a2a, 1.45],
+    sun: { color: 0xffd9a0, i: 1.7, dir: [-6, 10, 6] }, hemi: [0xffc27a, 0x9b5a2a, 1.0],
     fog: [0xf2b062, 24, 75], cloudColor: 0xffdf9e,
-    volcanoes: [[0.62, 2.55, 0.22, 1.4], [0.7, -2.45, 0.2, 1.2], [0.75, 1.5, 0.2, 1.1], [0.95, -1.4, 0.25, 1.2], [0.9, 3.14, 0.22, 1.0]].map(([a, b, r, h]) => ({ dir: dirFrom(a, b), r, h })),
+    volcanoes: [[0.5, 2.6, 0.2, 1.9], [0.54, -2.45, 0.18, 1.6], [0.75, 1.5, 0.2, 1.1], [0.95, -1.4, 0.25, 1.2], [0.9, 3.14, 0.22, 1.0]].map(([a, b, r, h]) => ({ dir: dirFrom(a, b), r, h })),
     height(d, nz) {
       let h = nz.fbm(d.x * 3, d.y * 3, d.z * 3, 4) * 0.25;
       for (const v of this.volcanoes) { const x = d.angleTo(v.dir) / v.r; if (x < 1.5) h += v.h * (x < 0.18 ? 0.82 + x : Math.max(0, 1 - (x - 0.18) / 1.3) ** 1.6); }
@@ -59,16 +70,24 @@ export const WORLD_DEFS = {
     },
     color(d, h, nz, o) {
       o.copy(col('#d9893f')).lerp(col('#a3572a'), CL(nz.fbm(d.x * 5, d.y * 5, d.z * 5, 3) + 0.3, 0, 1) * 0.6);
-      for (const v of this.volcanoes) { const x = d.angleTo(v.dir) / v.r; if (x < 0.22) o.lerp(col('#ff5a1f'), S(0.22 - x, 0, 0.08)); else if (x < 1) o.lerp(col('#5c3324'), (1 - x) * 0.45); }
+      for (const v of this.volcanoes) {
+        const x = d.angleTo(v.dir) / v.r;
+        if (x < 0.22) o.lerp(col('#ff5a1f'), S(0.22 - x, 0, 0.08));
+        else if (x < 1.25) {
+          o.lerp(col('#2a1712'), Math.min(0.92, (1.25 - x) * 1.4)); // dark basalt cone
+          const streak = Math.abs(Math.sin(Math.atan2(d.x - v.dir.x, d.z - v.dir.z) * 7));
+          if (x < 0.9 && streak > 0.93) o.lerp(col('#ff7a2a'), (0.9 - x) * 0.9); // lava rivers running down
+        }
+      }
     },
-    props: [['rockB', 9, 0.3, 0.6, '#7a3e22'], ['rocksB', 12, 0.12, 0.22, '#8f4a26']],
+    props: [['boulder', 12, 0.3, 0.6], ['stone', 26, 0.1, 0.22], ['pebble', 50, 0.04, 0.1]], rockPal: 'venus',
     station: false, lava: true, species: 'sp_venus', tints: ['#ffffff', '#ffe9f4', '#f1e6ff'],
   },
   mars: {
     rocky: true, radius: 9, seed: 41,
     sky: [[0, '#f7d7a8'], [0.3, '#eab47e'], [0.7, '#c77f52'], [1, '#7a4a3a']], skyLo: -0.4, skyHi: 0.85, stars: 0.15,
-    sun: { color: 0xffe6c9, i: 2.6, dir: [-8, 9, 6] }, hemi: [0xf2c79c, 0x8a3b22, 1.15],
-    craters: craterList(9, 14, 0.1, 0.28, 0.45),
+    sun: { color: 0xffe6c9, i: 1.8, dir: [-8, 9, 6] }, hemi: [0xf2c79c, 0x8a3b22, 0.85],
+    craters: craterList(9, 20, 0.06, 0.26, 0.45, 0.3, 7),
     olympus: { dir: dirFrom(0.75, 2.2), r: 0.6, h: 1.6 },
     height(d, nz) {
       let h = craters(d, this.craters) + nz.fbm(d.x * 3.5, d.y * 3.5, d.z * 3.5, 4) * 0.22;
@@ -81,29 +100,29 @@ export const WORLD_DEFS = {
       o.lerp(col('#8e3a22'), CL(-h * 1.5, 0, 0.6));
       if (d.y < -0.82) o.lerp(col('#fbf6f0'), S(-d.y, 0.82, 0.88));
     },
-    props: [['rockA', 9, 0.3, 0.6, '#9a4428'], ['rocksA', 14, 0.1, 0.22, '#a34a2a'], ['rover', 1, 0.6, 0.6, null], ['dish', 1, 0.9, 0.9, null]],
+    props: [['boulder', 12, 0.3, 0.6], ['stone', 30, 0.1, 0.22], ['pebble', 60, 0.04, 0.1], ['rover', 1, 0.6, 0.6, null], ['dish', 1, 0.9, 0.9, null]], rockPal: 'mars',
     station: true, species: 'sp_mars', tints: ['#ffffff', '#fff0c8', '#e0ffd8'],
   },
   // gas & ice giants: no solid surface, a floating sky station in the upper atmosphere
   jupiter: {
     rocky: false, sky: [[0, '#f3dcc0'], [0.35, '#e9c9a0'], [0.7, '#9a8fb8'], [1, '#3e3a6e']], skyLo: -0.3, skyHi: 0.9,
-    sun: { color: 0xfff1dc, i: 2.6, dir: [-8, 9, 6] }, hemi: [0xf6e2c8, 0x9a6a48, 1.2], cloud: 0xfff4e4, cloud2: 0xf0cfa8, deck: '#d7dbe6', trim: '#ff8a3a',
-    species: 'sp_jupiter', tints: ['#ffffff', '#ffd8f0', '#d8e4ff'], fog: [0xead2b4, 60, 650],
+    sun: { color: 0xfff1dc, i: 2.0, dir: [-8, 9, 6] }, hemi: [0xf6e2c8, 0x9a6a48, 0.95], cloud: 0xfff4e4, cloud2: 0xf0cfa8, deck: '#d7dbe6', trim: '#ff8a3a',
+    species: 'sp_jupiter', tints: ['#ffffff', '#ffd8f0', '#d8e4ff'], fog: [0xead2b4, 120, 900],
   },
   saturn: {
     rocky: false, sky: [[0, '#f6e7bf'], [0.35, '#efd9a2'], [0.7, '#a8a6c8'], [1, '#3c3e72']], skyLo: -0.3, skyHi: 0.9,
-    sun: { color: 0xfff3d6, i: 2.5, dir: [-8, 9, 6] }, hemi: [0xf7ebc8, 0x9c8a5e, 1.2], cloud: 0xfffaea, cloud2: 0xf3e2b2, deck: '#e2e4ec', trim: '#ffc83d',
-    species: 'sp_saturn', tints: ['#ffffff', '#fff0c8', '#ffe0d0'], rings: true, fog: [0xf0e0b6, 60, 650],
+    sun: { color: 0xfff3d6, i: 2.0, dir: [-8, 9, 6] }, hemi: [0xf7ebc8, 0x9c8a5e, 0.95], cloud: 0xfffaea, cloud2: 0xf3e2b2, deck: '#e2e4ec', trim: '#ffc83d',
+    species: 'sp_saturn', tints: ['#ffffff', '#fff0c8', '#ffe0d0'], rings: true, fog: [0xf0e0b6, 120, 900],
   },
   uranus: {
     rocky: false, sky: [[0, '#d6fbfb'], [0.35, '#a6eef0'], [0.7, '#5fb7d2'], [1, '#1d4a78']], skyLo: -0.3, skyHi: 0.9,
-    sun: { color: 0xf2fbff, i: 2.1, dir: [-8, 9, 6] }, hemi: [0xd8f8fa, 0x4f8f9a, 1.25], cloud: 0xf2feff, cloud2: 0xbcecef, deck: '#e6eef5', trim: '#2ec4b6',
-    species: 'sp_uranus', tints: ['#ffffff', '#e0f6ff', '#f0e8ff'], fog: [0xbdeef0, 60, 650], tilt: true,
+    sun: { color: 0xf2fbff, i: 1.8, dir: [-8, 9, 6] }, hemi: [0xd8f8fa, 0x4f8f9a, 1.0], cloud: 0xf2feff, cloud2: 0xbcecef, deck: '#e6eef5', trim: '#2ec4b6',
+    species: 'sp_uranus', tints: ['#ffffff', '#e0f6ff', '#f0e8ff'], fog: [0xbdeef0, 120, 900], tilt: true,
   },
   neptune: {
     rocky: false, sky: [[0, '#9fc2ff'], [0.35, '#5a8ff0'], [0.7, '#2c4fb8'], [1, '#0e1a52']], skyLo: -0.3, skyHi: 0.9,
-    sun: { color: 0xe8f0ff, i: 2.0, dir: [-8, 9, 6] }, hemi: [0xb8d0ff, 0x2a3f8a, 1.3], cloud: 0xe8f0ff, cloud2: 0x8fb0f5, deck: '#e4e9f5', trim: '#7b5cff',
-    species: 'sp_neptune', tints: ['#ffffff', '#d8ecff', '#e8dcff'], fog: [0x8fb4f0, 60, 650], wind: true,
+    sun: { color: 0xe8f0ff, i: 1.8, dir: [-8, 9, 6] }, hemi: [0xb8d0ff, 0x2a3f8a, 1.05], cloud: 0xe8f0ff, cloud2: 0x8fb0f5, deck: '#e4e9f5', trim: '#7b5cff',
+    species: 'sp_neptune', tints: ['#ffffff', '#d8ecff', '#e8dcff'], fog: [0x8fb4f0, 120, 900], wind: true,
   },
 };
 
@@ -121,18 +140,24 @@ export function buildPlanetWorld(id) {
     const R = def.radius;
     makeLights(scene, { sun: def.sun.color, sunI: def.sun.i, dir: def.sun.dir, sky: def.hemi[0], ground: def.hemi[1], hemiI: def.hemi[2], shadowSize: 8, target: [0, R, 0] });
     if (def.bigSun) scene.add(sunDisc(def.bigSun));
-    planet = makePlanet({ radius: R, detail: 56, seed: def.seed, heightFn: def.height.bind(def), colorFn: def.color.bind(def), rough: 0.95 });
+    planet = makePlanet({ radius: R, detail: 56, seed: def.seed, heightFn: def.height.bind(def), colorFn: def.color.bind(def), rough: 0.95, surface: def.surface || { scale: 3, bump: 0.6, tone: 0.18 } });
     scene.add(planet.mesh);
     base = new THREE.Group(); scene.add(base);
-    const pad = model('padL', { height: 0.3 });
-    const ps = new THREE.Box3().setFromObject(pad).getSize(V(0, 0, 0)); pad.scale.multiplyScalar(3.0 / Math.max(ps.x, ps.z));
-    placeOn(planet, pad, V(0, 1, 0), { sink: 0.04 }); base.add(pad);
-    padTop = new THREE.Box3().setFromObject(pad).max.y;
+    const pad = makePad({ radius: 1.5, label: nameOf(id), accent: ACCENT[id] });
+    placeOn(planet, pad, V(0, 1, 0), { sink: 0.02 }); base.add(pad);
+    padTop = pad.position.y + pad.userData.top;
+    const pal = ROCK_PALETTES[def.rockPal] || ROCK_PALETTES.space;
+    let seedN = 0;
     for (const [key, n, hMin, hMax, tint] of def.props) {
       for (let i = 0; i < n; i++) {
-        const m = model(key, { height: hMin + rnd() * (hMax - hMin) });
+        const size = hMin + rnd() * (hMax - hMin);
+        const rockKind = { boulder: { squash: 0.7, detail: 3, craters: 2 }, stone: { squash: 0.6, detail: 2, craters: 1 }, pebble: { squash: 0.55, detail: 1, craters: 0 } }[key];
+        const m = rockKind ? makeRock(seedN++, size, { ...pal, ...rockKind }) : model(key, { height: size });
+        if (key === 'pebble' || key === 'stone') m.castShadow = false; // tiny rocks: no shadow pass needed
         if (tint) m.traverse(o => { if (o.isMesh) o.material.color.set(tint); });
-        let d; do { d = dirFrom(0.42 + rnd() * 1.1, rnd() * 6.283); } while (Math.abs(Math.atan2(d.x, d.z)) < 0.6 && Math.acos(d.y) < 0.95);
+        // spread from just outside the pad to the horizon; keep the view line in front of the camera clear of big boulders
+        const near = key === 'pebble' ? 0.24 : key === 'stone' ? 0.27 : 0.36;
+        let d; do { d = dirFrom(near + Math.pow(rnd(), 1.6) * 0.95, rnd() * 6.283); } while (key !== 'pebble' && Math.abs(Math.atan2(d.x, d.z)) < 0.5 && Math.acos(d.y) < 0.75);
         placeOn(planet, m, d, { spin: rnd() * 6.28, sink: 0.05 }); base.add(m);
       }
     }
@@ -140,8 +165,20 @@ export function buildPlanetWorld(id) {
       const st = model('baseA', { height: 0.9 }); placeOn(planet, st, dirFrom(0.5, -2.0), { spin: 1.2, sink: 0.05 }); base.add(st);
       const tw = model('turbine', { height: 1.5 }); placeOn(planet, tw, dirFrom(0.55, 2.0), { spin: 0.4, sink: 0.05 }); base.add(tw);
     }
-    if (def.lava) { // glowing lava vents on the volcano tops
-      for (const v of def.volcanoes) { const g = new THREE.PointLight(0xff6a2a, 6, 4, 2); g.position.copy(v.dir).multiplyScalar(R + v.h * 0.85 + 0.3); scene.add(g); }
+    if (def.lava) { // glowing lava lakes in the volcano craters
+      const lavaM = new THREE.MeshStandardMaterial({ color: 0xff7a2a, emissive: 0xff4d0f, emissiveIntensity: 2.4, roughness: 0.5 });
+      for (const v of def.volcanoes) {
+        const top = v.dir.clone().multiplyScalar(planet.heightAt(v.dir) + 0.02);
+        const lava = new THREE.Mesh(new THREE.CircleGeometry(v.r * R * 0.16, 24), lavaM);
+        lava.position.copy(top); lava.quaternion.setFromUnitVectors(V(0, 0, 1), v.dir); scene.add(lava);
+        const g = new THREE.PointLight(0xff6a2a, 8, 5, 2); g.position.copy(v.dir).multiplyScalar(planet.heightAt(v.dir) + 0.5); scene.add(g);
+        const glow = glowSprite(0xff7a2a, 2.2, 0.5); glow.position.copy(top).addScaledVector(v.dir, 0.3); scene.add(glow);
+      }
+    }
+    if (id === 'mars') { // Phobos and Deimos: two small potato-shaped moons in the sky
+      const phobos = makeRock(4, 5, { ...ROCK_PALETTES.space, detail: 3, squash: 0.8, craters: 4 }); phobos.position.set(42, 25, -150); phobos.castShadow = false; scene.add(phobos);
+      const deimos = makeRock(9, 3, { ...ROCK_PALETTES.space, detail: 3, squash: 0.85, craters: 3 }); deimos.position.set(-64, 30, -200); deimos.castShadow = false; scene.add(deimos);
+      sway = (dt, t) => { phobos.rotation.y += dt * 0.05; deimos.rotation.y += dt * 0.03; };
     }
     if (def.cloudColor) {
       const clouds = new THREE.Group(); scene.add(clouds);
@@ -206,8 +243,9 @@ export function buildPlanetWorld(id) {
 // ---------------------------------------------------------------- floating sky station (gas / ice giants)
 function buildSkyStation(scene, def, id, rnd) {
   // the giant below: a huge banded sphere, so its horizon curves gently under the clouds
-  const giant = new THREE.Mesh(new THREE.SphereGeometry(400, 96, 64), new THREE.MeshStandardMaterial({ map: planetTexture(id), roughness: 0.95, emissive: 0xffffff, emissiveMap: planetTexture(id), emissiveIntensity: 0.12 }));
-  giant.position.set(0, -404, -60); giant.rotation.set(0.2, 0.8, def.tilt ? 1.2 : 0.05); scene.add(giant);
+  const giant = new THREE.Mesh(new THREE.SphereGeometry(150, 128, 96), new THREE.MeshStandardMaterial({ map: planetTexture(id), roughness: 0.95, emissive: 0xffffff, emissiveMap: planetTexture(id), emissiveIntensity: 0.12 }));
+  // a globe below the station: small enough that its curve and cloud bands read, equator turned toward us
+  giant.position.set(0, -158, -110); giant.rotation.set(Math.PI / 2 - 0.5, 0, def.tilt ? 0.6 : 0.12); scene.add(giant);
   // cloud sea
   const clouds = new THREE.Group(); scene.add(clouds);
   for (let i = 0; i < 26; i++) {
@@ -218,7 +256,7 @@ function buildSkyStation(scene, def, id, rnd) {
   if (def.rings) { // Saturn's rings arc across the sky
     const ring = planetMesh('saturn', 1).userData.ring.clone();
     ring.material = ring.material.clone(); ring.material.opacity = 0.85; ring.material.fog = false;
-    ring.scale.setScalar(160); ring.position.set(0, -60, -260); ring.rotation.set(-1.25, 0.15, 0.32); scene.add(ring);
+    ring.scale.setScalar(150); ring.position.copy(giant.position); ring.rotation.set(-Math.PI / 2 + 0.32, 0, 0.12); ring.material.opacity = 1; scene.add(ring);
   }
   if (id === 'jupiter') { // two Galilean moons hanging in the sky
     for (const [x, y, s, look] of [[-90, 60, 7, 'mercury'], [120, 85, 5, 'mars']]) { const m = planetMesh(look, s); m.position.set(x, y, -240); scene.add(m); }
@@ -230,14 +268,18 @@ function buildSkyStation(scene, def, id, rnd) {
   const deckMat = mat(def.deck, { rough: 0.45, metal: 0.35, envI: 0.8 }), dark = mat('#3b4258', { rough: 0.4, metal: 0.6 }), trim = mat(def.trim, { rough: 0.4, emissive: def.trim, emissiveI: 0.35 });
   const deck = new THREE.Mesh(new THREE.CylinderGeometry(4.3, 4.0, 0.45, 64), deckMat); deck.position.y = deckY - 0.225; station.add(deck);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(4.25, 0.09, 12, 96), trim); rim.rotation.x = Math.PI / 2; rim.position.y = deckY; station.add(rim);
-  // landing circle
-  const pc = document.createElement('canvas'); pc.width = pc.height = 512; const x = pc.getContext('2d');
-  x.fillStyle = '#3b4258'; x.beginPath(); x.arc(256, 256, 250, 0, 7); x.fill();
-  x.strokeStyle = def.trim; x.lineWidth = 22; x.beginPath(); x.arc(256, 256, 214, 0, 7); x.stroke();
-  x.strokeStyle = '#ffffff'; x.lineWidth = 10; for (let i = 0; i < 12; i++) { x.beginPath(); x.arc(256, 256, 180, i * 0.5236 + 0.08, i * 0.5236 + 0.4); x.stroke(); }
-  x.fillStyle = '#ffffff'; x.fillRect(156, 196, 36, 120); x.fillRect(320, 196, 36, 120); x.fillRect(156, 240, 200, 32);
-  const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace; ptex.anisotropy = 8;
-  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.45, 64), new THREE.MeshStandardMaterial({ map: ptex, roughness: 0.6 }));
+  // panelled deck floor + the same named landing pad as on the rocky worlds
+  const dc = document.createElement('canvas'); dc.width = dc.height = 1024; const x = dc.getContext('2d');
+  x.fillStyle = def.deck; x.fillRect(0, 0, 1024, 1024);
+  x.strokeStyle = 'rgba(40,46,70,.28)'; x.lineWidth = 5;
+  for (const r of [230, 340, 450]) { x.beginPath(); x.arc(512, 512, r, 0, 7); x.stroke(); }
+  for (let i = 0; i < 24; i++) { const a = i / 24 * 6.283; x.beginPath(); x.moveTo(512 + Math.cos(a) * 230, 512 + Math.sin(a) * 230); x.lineTo(512 + Math.cos(a) * 512, 512 + Math.sin(a) * 512); x.stroke(); }
+  x.fillStyle = 'rgba(40,46,70,.35)'; for (let i = 0; i < 48; i++) { const a = i / 48 * 6.283; for (const r of [250, 360, 470]) { x.beginPath(); x.arc(512 + Math.cos(a) * r, 512 + Math.sin(a) * r, 5, 0, 7); x.fill(); } }
+  x.strokeStyle = def.trim; x.lineWidth = 14; x.globalAlpha = 0.85; x.beginPath(); x.arc(512, 512, 395, 0, 7); x.stroke(); x.globalAlpha = 1;
+  const dtex = new THREE.CanvasTexture(dc); dtex.colorSpace = THREE.SRGBColorSpace; dtex.anisotropy = 8;
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(4.28, 96), new THREE.MeshStandardMaterial({ map: dtex, roughness: 0.55, metalness: 0.25, envMap: gfx.envMap, envMapIntensity: 0.6 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = deckY + 0.004; station.add(floor);
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.5, 96), new THREE.MeshStandardMaterial({ map: padTexture(nameOf(id), ACCENT[id]), roughness: 0.7, envMap: gfx.envMap, envMapIntensity: 0.3 }));
   pad.rotation.x = -Math.PI / 2; pad.position.y = deckY + 0.012; station.add(pad);
   // railing
   for (let i = 0; i < 28; i++) {

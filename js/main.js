@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { gfx, initRenderer } from './gfx.js';
+import { gfx, initRenderer, renderFrame } from './gfx.js';
 import { loadModels, MODELS } from './models.js';
 import { preloadRocketArt } from './rocket.js';
 import { tick } from './loop.js';
@@ -24,12 +24,14 @@ async function boot() {
   gfx.renderer.setAnimationLoop(() => {
     const real = Math.min(clock.getDelta(), 1 / 20);
     const dt = tick(real);
-    if (app.world) { app.world.update(dt, real); gfx.renderer.render(app.world.scene, gfx.camera); }
+    if (app.world) { app.world.update(dt, real); renderFrame(app.world.scene, gfx.camera); }
   });
   document.getElementById('boot').classList.add('gone');
   // debug: fast-forward game time (used for automated checks)
-  window.__ff = sec => { for (let i = 0; i < sec * 30; i++) { const dt = tick(1 / 30); if (app.world) app.world.update(dt, 1 / 30); } if (app.world) gfx.renderer.render(app.world.scene, gfx.camera); };
+  window.__ff = sec => { for (let i = 0; i < sec * 30; i++) { const dt = tick(1 / 30); if (app.world) app.world.update(dt, 1 / 30); } if (app.world) renderFrame(app.world.scene, gfx.camera); };
   window.__app = app;
+  // debug: save a clean 3D frame (no HTML overlay) through scripts/save-server.mjs
+  window.__snap = async name => { renderFrame(app.world.scene, gfx.camera); const url = gfx.renderer.domElement.toDataURL('image/png'); return (await fetch('http://127.0.0.1:8092/?name=' + name, { method: 'POST', body: url })).text(); };
   const dev = new URLSearchParams(location.search);
   if (dev.has('leg')) { state.name = 'تجربة'; state.diff = dev.get('diff') || 'mid'; state.leg = +dev.get('leg'); }
   if (dev.get('go') === 'flight') return journey(state.leg, 'flight');
