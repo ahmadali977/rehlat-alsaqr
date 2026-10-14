@@ -18,8 +18,8 @@ export async function runRepair() {
   const shade = mount(el('div', 'fade-in')); Object.assign(shade.style, { position: 'absolute', inset: '0', background: 'rgba(10,8,30,.55)' });
   const box = el('div', 'panel pop-in'); Object.assign(box.style, { width: '960px', padding: '18px 30px 24px', background: '#2b2f45', borderColor: '#141026' });
   const head = el('div'); Object.assign(head.style, { display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff', marginBottom: '8px' });
-  const title = el('div', 'title-font'); title.style.fontSize = '42px'; title.style.color = '#ffc83d';
-  const info = el('div'); Object.assign(info.style, { fontSize: '25px', fontWeight: '700', color: '#dfe6ff' });
+  const title = el('div', 'title-font'); Object.assign(title.style, { fontSize: '40px', color: '#ffc83d', whiteSpace: 'nowrap', flex: 'none' });
+  const info = el('div'); Object.assign(info.style, { fontSize: '21px', fontWeight: '700', color: '#dfe6ff', lineHeight: '1.4', textAlign: 'left', marginRight: '18px' });
   head.append(title, info);
   const svg = svgEl('svg', { viewBox: `0 0 ${VW} ${VH}`, width: VW, height: VH }); svg.style.display = 'block'; svg.style.touchAction = 'none'; svg.style.direction = 'ltr';
   const status = el('div'); Object.assign(status.style, { textAlign: 'center', color: '#fff', fontSize: '26px', fontWeight: '700', marginTop: '8px', minHeight: '38px' });
@@ -46,14 +46,19 @@ function defs(svg) {
     <radialGradient id="glowR"><stop offset="0" stop-color="#ffb03a" stop-opacity=".9"/><stop offset="1" stop-color="#ff4d2a" stop-opacity="0"/></radialGradient>
     <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>`;
 }
-function toSvg(svg, e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+// Finger / mouse position in SVG units. Uses the on-screen box (which includes every CSS scale) instead of
+// getScreenCTM, because Safari on iPhone/iPad ignores the CSS scale of parent elements there.
+function toSvg(svg, e) { const r = svg.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * VW, y: (e.clientY - r.top) / r.height * VH }; }
+// stop the page from scrolling, bouncing or zooming while a finger is on the mini-game
+function lockTouch(el) { for (const ev of ['touchstart', 'touchmove']) el.addEventListener(ev, e => e.preventDefault(), { passive: false }); }
 function rivets(svg, x, y, w, h, r = 6) { for (const [a, b] of [[x + 18, y + 18], [x + w - 18, y + 18], [x + 18, y + h - 18], [x + w - 18, y + h - 18]]) svgEl('circle', { cx: a, cy: b, r, fill: '#8d96b4', stroke: '#23283d', 'stroke-width': 2 }, svg); }
 
 // ---------------------------------------------------------------- 1) wires
 function wires({ svg, title, info, status }) {
   title.innerHTML = T('🔌 أعد توصيل الأسلاك');
-  info.innerHTML = T('اسحب كل سلك إلى المقبس الذي له اللون نفسه');
+  info.innerHTML = T('اسحب السلك إلى المقبس المطابق، أو انقر السلك ثم انقر المقبس');
   return new Promise(done => {
+    lockTouch(svg);
     svgEl('rect', { x: 10, y: 10, width: VW - 20, height: VH - 20, rx: 26, fill: 'url(#metal)', stroke: '#141026', 'stroke-width': 5 }, svg);
     rivets(svg, 10, 10, VW - 20, VH - 20);
     const C = [['#ff5a5f', 'circle'], ['#ffc83d', 'tri'], ['#3d8bff', 'square'], ['#2fd17a', 'star']];
@@ -68,26 +73,58 @@ function wires({ svg, title, info, status }) {
       if (shape === 'tri') svgEl('polygon', { points: `${x},${y - 19} ${x + 18},${y + 14} ${x - 18},${y + 14}`, fill: col }, g);
       if (shape === 'star') { let p = ''; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 8 : 19; p += `${x + Math.cos(a) * r},${y + Math.sin(a) * r} `; } svgEl('polygon', { points: p, fill: col }, g); }
     };
-    const plugs = left.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: 40, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: C[ci][0], stroke: '#141026', 'stroke-width': 4 }, g); mark(g, 150, ys[i], ci); svgEl('rect', { x: 20, y: ys[i] - 44, width: 200, height: 88, fill: 'transparent' }, g); g.style.cursor = 'grab'; return { g, ci, x: 150, y: ys[i], done: false }; });
-    const sockets = right.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: VW - 130, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: '#1c1f30', stroke: '#141026', 'stroke-width': 4 }, g); mark(g, VW - 150, ys[i], ci); return { g, ci, x: VW - 150, y: ys[i] }; });
-    let drag = null, left2 = 4;
+    const plugs = left.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: 40, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: C[ci][0], stroke: '#141026', 'stroke-width': 4 }, g); mark(g, 150, ys[i], ci); g.style.cursor = 'pointer'; return { g, ci, x: 150, y: ys[i], done: false }; });
+    const sockets = right.map((ci, i) => { const g = svgEl('g', {}, svg); const plate = svgEl('rect', { x: VW - 130, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: '#1c1f30', stroke: '#141026', 'stroke-width': 4 }, g); mark(g, VW - 150, ys[i], ci); g.style.cursor = 'pointer'; return { g, ci, x: VW - 150, y: ys[i], plate, used: false }; });
+    // selection ring around the chosen plug, and a highlight on the socket the wire is snapping to
+    const ring = svgEl('circle', { r: 40, fill: 'none', stroke: '#ffffff', 'stroke-width': 6, 'stroke-dasharray': '10 8', opacity: 0 }, svg);
+    const aim = svgEl('circle', { r: 40, fill: 'none', stroke: '#ffffff', 'stroke-width': 6, opacity: 0 }, svg);
+    let sel = null, line = null, down = null, left2 = 4;
     const path = (x1, y1, x2, y2) => `M${x1},${y1} C${x1 + 180},${y1} ${x2 - 180},${y2} ${x2},${y2}`;
-    plugs.forEach(p => p.g.addEventListener('pointerdown', e => {
-      if (p.done) return; e.preventDefault(); svg.setPointerCapture(e.pointerId);
-      const line = svgEl('path', { d: path(p.x, p.y, p.x, p.y), stroke: C[p.ci][0], 'stroke-width': 16, fill: 'none', 'stroke-linecap': 'round' }, wiresG);
-      drag = { p, line }; sfx.pop();
-    }));
-    svg.addEventListener('pointermove', e => { if (!drag) return; const q = toSvg(svg, e); drag.line.setAttribute('d', path(drag.p.x, drag.p.y, q.x, q.y)); });
-    svg.addEventListener('pointerup', e => {
-      if (!drag) return; const q = toSvg(svg, e); const { p, line } = drag; drag = null;
-      const s = sockets.find(s => Math.abs(s.y - q.y) < 45 && q.x > VW - 330); // generous drop zone for fingers
-      if (s && s.ci === p.ci) {
-        line.setAttribute('d', path(p.x, p.y, s.x, s.y)); p.done = true; left2--; sfx.fix();
-        spark(svg, s.x, s.y);
-        status.innerHTML = T(`ممتاز! بقي ${ar(left2)}`);
+    // whole rows are touch targets: anywhere in a plug's row on the left half picks it, anywhere in a socket's row on the right half aims at it
+    const plugAt = q => q.x < VW * 0.45 ? plugs.find(p => !p.done && Math.abs(p.y - q.y) < 45) : null;
+    const socketAt = (q, reach = 45) => q.x > VW * 0.5 ? sockets.find(s => !s.used && Math.abs(s.y - q.y) < reach) : null;
+    const select = p => {
+      sel = p; line && line.remove();
+      line = svgEl('path', { d: path(p.x, p.y, p.x + 40, p.y), stroke: C[p.ci][0], 'stroke-width': 16, fill: 'none', 'stroke-linecap': 'round' }, wiresG);
+      ring.setAttribute('cx', p.x); ring.setAttribute('cy', p.y); ring.setAttribute('stroke', C[p.ci][0]); ring.setAttribute('opacity', 1);
+      sfx.pop(); status.innerHTML = T('الآن انقر المقبس الذي له اللون نفسه أو اسحب إليه');
+    };
+    const clear = () => { sel = null; line && line.remove(); line = null; ring.setAttribute('opacity', 0); aim.setAttribute('opacity', 0); };
+    const showAim = s => { if (s) { aim.setAttribute('cx', s.x); aim.setAttribute('cy', s.y); aim.setAttribute('stroke', C[sel.ci][0]); aim.setAttribute('opacity', 1); } else aim.setAttribute('opacity', 0); };
+    const tryConnect = s => {
+      const p = sel;
+      if (s.ci === p.ci) {
+        line.setAttribute('d', path(p.x, p.y, s.x, s.y)); line = null; // the wire stays
+        p.done = true; s.used = true; left2--; sfx.fix(); spark(svg, s.x, s.y);
+        s.plate.setAttribute('fill', C[s.ci][0]);
+        sel = null; ring.setAttribute('opacity', 0); aim.setAttribute('opacity', 0);
+        status.innerHTML = T(left2 ? `ممتاز! بقي ${ar(left2)}` : 'تم توصيل كل الأسلاك!');
         if (!left2) done();
-      } else { line.remove(); if (s) { sfx.wrong(); status.innerHTML = T('لون مختلف! حاول مرة أخرى'); } }
+      } else { sfx.wrong(); status.innerHTML = T('لون مختلف! جرّب مقبسًا آخر'); line.setAttribute('d', path(p.x, p.y, p.x + 40, p.y)); showAim(null); }
+    };
+    svg.addEventListener('pointerdown', e => {
+      e.preventDefault(); try { svg.setPointerCapture(e.pointerId); } catch {}
+      const q = toSvg(svg, e);
+      const p = plugAt(q);
+      if (p) { select(p); down = { x: q.x, y: q.y, dragging: true }; return; }
+      if (sel) { const s = socketAt(q, 50); if (s) { tryConnect(s); return; } }
+      down = null;
     });
+    svg.addEventListener('pointermove', e => {
+      if (!sel || !down || !down.dragging) return;
+      const q = toSvg(svg, e);
+      const s = socketAt(q, 70); // magnet: the wire end jumps onto a nearby socket
+      showAim(s);
+      line.setAttribute('d', s ? path(sel.x, sel.y, s.x, s.y) : path(sel.x, sel.y, q.x, q.y));
+    });
+    const up = e => {
+      if (!sel || !down) return;
+      const q = toSvg(svg, e); const moved = Math.hypot(q.x - down.x, q.y - down.y) > 30; down = null;
+      if (!moved) { line.setAttribute('d', path(sel.x, sel.y, sel.x + 40, sel.y)); return; } // a tap: keep the plug selected and wait for a socket tap
+      const s = socketAt(q, 70);
+      if (s) tryConnect(s); else { clear(); status.innerHTML = T('اسحب السلك حتى المقبس، أو انقره ثم انقر المقبس'); }
+    };
+    svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', () => { down = null; });
   });
 }
 
