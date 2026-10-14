@@ -29,9 +29,21 @@ html, body {
 #ui * { pointer-events: auto; }
 #ui .pass, #ui .pass * { pointer-events: none; }
 
-#boot { position: fixed; inset: 0; background: #120c2e; display: flex; align-items: center; justify-content: center; z-index: 50; transition: opacity .6s; }
+#boot { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; transition: opacity .7s;
+  background: radial-gradient(ellipse at 50% 120%, #3b2a7a 0%, #1a1240 45%, #0d0a24 100%); }
 #boot.gone { opacity: 0; pointer-events: none; }
-.boot-spin { width: 54px; height: 54px; border-radius: 50%; border: 7px solid #ffffff22; border-top-color: var(--gold); animation: spin 1s linear infinite; }
+.boot-box { text-align: center; color: #fff; padding: 24px; width: min(520px, 90vw); }
+.boot-title { font-family: 'Lalezar', 'Baloo', sans-serif; font-size: clamp(54px, 11vw, 96px); line-height: 1.05; -webkit-text-stroke: 10px #231942; paint-order: stroke fill; text-shadow: 0 8px 0 #231942; }
+.boot-title span { color: #ffc83d; }
+.boot-sub { font-family: 'Lalezar', 'Baloo', sans-serif; font-size: clamp(18px, 3.4vw, 26px); opacity: .85; margin: 6px 0 26px; }
+.boot-bar { height: 16px; border-radius: 999px; background: #ffffff1f; border: 3px solid #ffffff33; overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 4%; border-radius: 999px; background: linear-gradient(90deg, #12a150, #ffc83d); transition: width .3s ease; }
+.boot-note { font-family: 'Baloo', Tahoma, sans-serif; font-weight: 600; font-size: 17px; margin-top: 12px; opacity: .75; min-height: 26px; }
+#rotate { display: none; position: fixed; inset: 0; z-index: 60; background: #0d0a24; color: #fff; flex-direction: column; align-items: center; justify-content: center; gap: 26px; text-align: center; padding: 24px; }
+.rot-phone { width: 70px; height: 116px; border: 6px solid #ffc83d; border-radius: 16px; animation: rot 2.4s ease-in-out infinite; }
+.rot-text { font-family: 'Lalezar', 'Baloo', sans-serif; font-size: 28px; line-height: 1.5; }
+@keyframes rot { 0%, 25% { transform: rotate(0); } 55%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- generic pieces ---------- */
@@ -153,7 +165,7 @@ html, body {
 .banner .bs { font-family: 'Lalezar'; color: var(--gold); font-size: 36px; -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
 
 /* ---------- title screen ---------- */
-.logo { position: absolute; top: 46px; left: 130px; right: 640px; text-align: center; white-space: nowrap; }
+.logo { position: absolute; top: 46px; left: 230px; right: 620px; text-align: center; white-space: nowrap; }
 .logo .l1 { font-family: 'Lalezar'; font-size: 120px; line-height: 1; color: #fff; -webkit-text-stroke: 14px var(--ink); paint-order: stroke fill;
   text-shadow: 0 10px 0 var(--ink); background: none; }
 .logo .l1 span { color: var(--gold); }

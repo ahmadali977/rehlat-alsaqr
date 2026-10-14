@@ -7,6 +7,14 @@ export const PLANET_COLORS = { earth: '#3aa6d8', mercury: '#a49487', venus: '#e8
 
 const ICON_MUSIC = '<svg viewBox="0 0 24 24"><path fill="#231942" d="M9 3v11.6A3.5 3.5 0 1 0 11 18V8h7V3H9z"/></svg>';
 const ICON_SFX = '<svg viewBox="0 0 24 24"><path fill="#231942" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>';
+const ICON_FULL = '<svg viewBox="0 0 24 24"><path fill="none" stroke="#231942" stroke-width="2.6" stroke-linecap="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const ICON_SMALL = '<svg viewBox="0 0 24 24"><path fill="none" stroke="#231942" stroke-width="2.6" stroke-linecap="round" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+// full screen is offered in web browsers only (the Android and PC apps are already full screen)
+export const canFullscreen = () => !!(document.fullscreenEnabled && !window.Capacitor && !/Electron/.test(navigator.userAgent));
+export function goFullscreen() {
+  if (!canFullscreen() || document.fullscreenElement) return;
+  document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {});
+}
 const SLASH = '<svg viewBox="0 0 24 24" style="position:absolute;width:40px;height:40px"><path d="M4 4 L20 20" stroke="#ff5a5f" stroke-width="3.5" stroke-linecap="round"/></svg>';
 
 let settingsBox = null;
@@ -20,6 +28,12 @@ export function showSettings() {
     draw(); return b;
   };
   settingsBox.append(mk(ICON_MUSIC, () => audioSettings.music, () => audioSettings.toggleMusic()), mk(ICON_SFX, () => audioSettings.sfx, () => audioSettings.toggleSfx()));
+  if (canFullscreen()) {
+    const fs = el('button', 'iconbtn'); fs.title = 'ملء الشاشة';
+    const draw = () => { fs.innerHTML = document.fullscreenElement ? ICON_SMALL : ICON_FULL; };
+    fs.onclick = e => { e.stopPropagation(); sfx.click(); document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : goFullscreen(); };
+    document.addEventListener('fullscreenchange', draw); draw(); settingsBox.append(fs);
+  }
   mount(settingsBox);
 }
 export function settingsNode() { return settingsBox; }

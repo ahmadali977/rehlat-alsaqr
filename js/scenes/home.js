@@ -7,7 +7,7 @@ import { el, mount, unmount, button, showCards, banner, bigButton, T, ar, wait }
 import { music, sfx } from '../audio.js';
 import { EARTH_INFO, PLANETS } from '../content.js';
 import { state, reset, hasSave, load, save, DIFFICULTY } from '../state.js';
-import { showSettings } from '../hud.js';
+import { showSettings, goFullscreen } from '../hud.js';
 
 const R = EARTH_R;
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -49,6 +49,7 @@ export async function titleScreen(go) {
     const goRow = form.querySelector('.go');
     const start = button('ابدأ الرحلة', 'gold pulse', async () => {
       reset(input.value.trim() || 'رائد الفضاء', diff);
+      if (matchMedia('(pointer: coarse)').matches) goFullscreen(); // phones and tablets: play full screen, landscape
       orbit = false; await Promise.all([unmount(form), unmount(logo)]);
       resolve({ mode: 'new' });
     });

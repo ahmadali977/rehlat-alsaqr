@@ -70,7 +70,7 @@ export async function landing(leg) {
     { icon: '📊', title: `بطاقة ${p.name}`, html: statsHtml },
   ];
   await showCards(cards, {
-    name: p.alienName, bubble: 'right', width: 640, pos: { left: 60, top: 120 },
+    name: p.alienName, bubble: 'right', width: 640, pos: { left: 76, top: 150 },
     finalLabel: leg < PLANETS.length - 1 ? `إلى ${PLANETS[leg + 1].name} 🚀` : 'إلى الاحتفال الختامي 🎉',
     onPage: i => { if (i > 0) { sfx.chatter(4 + (i % 3)); guide.userData.play(i % 2 ? 'Yes' : 'Dance', { loop: false, then: 'Idle' }); } },
   });

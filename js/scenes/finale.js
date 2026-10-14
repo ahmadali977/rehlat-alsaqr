@@ -85,7 +85,7 @@ export async function finale(back) {
   const next = button('متابعة', 'gold', async () => { await unmount(cert); await credits(); fw = false; back(); });
   cert.querySelector('.go').append(next);
   mount(cert);
-  cert.style.left = '50%'; cert.style.top = '50%'; cert.style.marginLeft = (-cert.offsetWidth / 2) + 'px'; cert.style.marginTop = (-cert.offsetHeight / 2 + 70) + 'px';
+  cert.style.left = '50%'; cert.style.top = '50%'; cert.style.marginLeft = (-cert.offsetWidth / 2) + 'px'; cert.style.marginTop = (-cert.offsetHeight / 2 + 36) + 'px';
   sfx.done();
 }
 
@@ -100,11 +100,11 @@ function firework(fx) {
 
 // ---------------------------------------------------------------- end credits
 const TRACKS = {
-  'title_a.ogg': 'Darbuka Delight — Adiutorium', 'title_b.ogg': "Fouler l'horizon — Komiku", 'title_c.ogg': 'Arabesque — brainiac256 (CC-BY 3.0)',
+  'title_a.mp3': 'Darbuka Delight — Adiutorium', 'title_b.mp3': "Fouler l'horizon — Komiku", 'title_c.mp3': 'Arabesque — brainiac256 (CC-BY 3.0)',
   'space_a.mp3': 'Time to go to space now !! — Komiku', 'space_b.mp3': 'Battle of Pogs — Komiku',
   'repair_a.mp3': 'Time Attack against the universe — Komiku', 'repair_b.mp3': 'Fetch Contest — Komiku',
   'celebrate_a.mp3': 'Disco Cat — Komiku', 'celebrate_b.mp3': 'The weekly fair — Komiku',
-  'finale_a.ogg': 'Ending — Komiku', 'finale_b.ogg': 'Victory — Komiku', 'finale_c.ogg': 'End of the trip — Komiku',
+  'finale_a.mp3': 'Ending — Komiku', 'finale_b.mp3': 'Victory — Komiku', 'finale_c.mp3': 'End of the trip — Komiku',
 };
 function credits() {
   return new Promise(resolve => {

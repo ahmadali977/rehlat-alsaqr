@@ -43,7 +43,7 @@ function buildSpace(leg) {
 
   // the Sun far away (smaller on later legs)
   const sun = planetMesh('sun', 1, { segments: 48 }); const sunSize = 26 / (1 + leg * 0.9);
-  sun.scale.setScalar(sunSize); sun.position.set(-230, 120, -420); scene.add(sun);
+  sun.scale.setScalar(sunSize); sun.position.set(-130, 135, -420); scene.add(sun);
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffc860, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   sunGlow.scale.setScalar(sunSize * 5); sunGlow.position.copy(sun.position); scene.add(sunGlow);
 

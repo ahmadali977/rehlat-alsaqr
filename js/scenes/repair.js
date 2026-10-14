@@ -1,5 +1,6 @@
 import { el, mount, unmount, T, ar, shuffle, wait } from '../ui.js';
 import { music, sfx } from '../audio.js';
+import { onFrame } from '../loop.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
@@ -67,7 +68,7 @@ function wires({ svg, title, info, status }) {
       if (shape === 'tri') svgEl('polygon', { points: `${x},${y - 19} ${x + 18},${y + 14} ${x - 18},${y + 14}`, fill: col }, g);
       if (shape === 'star') { let p = ''; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 8 : 19; p += `${x + Math.cos(a) * r},${y + Math.sin(a) * r} `; } svgEl('polygon', { points: p, fill: col }, g); }
     };
-    const plugs = left.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: 40, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: C[ci][0], stroke: '#141026', 'stroke-width': 4 }, g); mark(g, 150, ys[i], ci); g.style.cursor = 'grab'; return { g, ci, x: 150, y: ys[i], done: false }; });
+    const plugs = left.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: 40, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: C[ci][0], stroke: '#141026', 'stroke-width': 4 }, g); mark(g, 150, ys[i], ci); svgEl('rect', { x: 20, y: ys[i] - 44, width: 200, height: 88, fill: 'transparent' }, g); g.style.cursor = 'grab'; return { g, ci, x: 150, y: ys[i], done: false }; });
     const sockets = right.map((ci, i) => { const g = svgEl('g', {}, svg); svgEl('rect', { x: VW - 130, y: ys[i] - 14, width: 90, height: 28, rx: 10, fill: '#1c1f30', stroke: '#141026', 'stroke-width': 4 }, g); mark(g, VW - 150, ys[i], ci); return { g, ci, x: VW - 150, y: ys[i] }; });
     let drag = null, left2 = 4;
     const path = (x1, y1, x2, y2) => `M${x1},${y1} C${x1 + 180},${y1} ${x2 - 180},${y2} ${x2},${y2}`;
@@ -79,7 +80,7 @@ function wires({ svg, title, info, status }) {
     svg.addEventListener('pointermove', e => { if (!drag) return; const q = toSvg(svg, e); drag.line.setAttribute('d', path(drag.p.x, drag.p.y, q.x, q.y)); });
     svg.addEventListener('pointerup', e => {
       if (!drag) return; const q = toSvg(svg, e); const { p, line } = drag; drag = null;
-      const s = sockets.find(s => Math.hypot(s.x - q.x, s.y - q.y) < 60);
+      const s = sockets.find(s => Math.abs(s.y - q.y) < 45 && q.x > VW - 330); // generous drop zone for fingers
       if (s && s.ci === p.ci) {
         line.setAttribute('d', path(p.x, p.y, s.x, s.y)); p.done = true; left2--; sfx.fix();
         spark(svg, s.x, s.y);
@@ -140,28 +141,26 @@ function valve({ svg, title, info, status }) {
     svgEl('polygon', { points: `${cx - 10},${cy} ${cx + 10},${cy} ${cx},${cy - R + 18}`, fill: '#ff5a5f', stroke: '#141026', 'stroke-width': 3 }, needle);
     svgEl('circle', { cx, cy, r: 26, fill: '#ffc83d', stroke: '#141026', 'stroke-width': 5 }, svg);
     const lights = [0, 1, 2].map(i => svgEl('circle', { cx: 60, cy: 90 + i * 70, r: 22, fill: '#1c1f30', stroke: '#141026', 'stroke-width': 4 }, svg));
-    let hits = 0, a = 0.05, dir = 1, speed = 0.75, z0, z1, raf, lock = false;
+    let hits = 0, a = 0.05, dir = 1, speed = 0.75, z0, z1, lock = false;
     const newZone = () => {
       const width = 0.2 - hits * 0.035; z0 = 0.15 + Math.random() * (0.7 - width); z1 = z0 + width;
       const p0 = Math.PI + z0 * Math.PI, p1 = Math.PI + z1 * Math.PI;
       zone.setAttribute('d', `M${cx + Math.cos(p0) * R},${cy + Math.sin(p0) * R} A${R},${R} 0 0 1 ${cx + Math.cos(p1) * R},${cy + Math.sin(p1) * R}`);
     };
     newZone();
-    let last = performance.now();
-    const step = now => {
-      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const step = dt => {
       if (!lock) { a += dir * speed * dt; if (a > 1) { a = 1; dir = -1; } if (a < 0) { a = 0; dir = 1; } }
       needle.setAttribute('transform', `rotate(${-90 + a * 180} ${cx} ${cy})`);
-      raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(step);
-    const stopBtn = el('button', 'btn gold', T('أوقف!')); Object.assign(stopBtn.style, { position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: '86px' });
+    step(0);
+    const stopNeedle = onFrame(dt => step(Math.min(0.05, dt)));
+    const stopBtn = el('button', 'btn gold', T('أوقف!')); Object.assign(stopBtn.style, { position: 'absolute', left: '0', right: '0', margin: '0 auto', width: 'fit-content', bottom: '86px', fontSize: '40px', padding: '18px 56px 14px' });
     svg.parentNode.style.position = 'absolute'; svg.parentNode.append(stopBtn);
     const press = async () => {
       if (lock) return; lock = true;
       if (a >= z0 && a <= z1) {
         lights[hits].setAttribute('fill', '#2fd17a'); hits++; sfx.fix(); status.innerHTML = T(`رائع! ${ar(hits)} من ٣`);
-        if (hits >= 3) { cancelAnimationFrame(raf); stopBtn.remove(); window.removeEventListener('keydown', key); done(); return; }
+        if (hits >= 3) { stopNeedle(); stopBtn.remove(); window.removeEventListener('keydown', key); done(); return; }
         speed += 0.18; await wait(450); newZone();
       } else { sfx.wrong(); status.innerHTML = T('خارج المنطقة الخضراء، جرّب مرة أخرى'); await wait(500); }
       lock = false;

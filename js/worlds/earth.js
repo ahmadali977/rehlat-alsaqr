@@ -85,7 +85,7 @@ export function buildEarthWorld() {
   const spots = [
     [0.4, 1.2, 'palms', 1.9], [0.5, 1.75, 'palm1', 1.7], [0.42, 2.5, 'palm2', 1.6], [0.45, -1.25, 'palm3', 1.8],
     [0.55, -2.0, 'palm4', 1.5], [0.66, 1.45, 'palms', 1.6], [0.62, -1.6, 'palm1', 1.5], [0.38, 3.1, 'palm2', 1.4], [0.6, 2.9, 'palms', 1.7],
-    [0.9, 0.6, 'palm3', 1.6], [0.95, -0.5, 'palms', 1.7],
+    [0.9, 2.1, 'palm3', 1.6], [0.95, -2.3, 'palms', 1.7],
   ];
   for (const [a, b, k, h] of spots) { const p = model(k, { height: h }); placeOn(planet, p, dirFrom(a, b), { spin: rnd() * 6, sink: 0.05 }); world.add(p); }
   const tent = model('tent', { height: 0.9 }); placeOn(planet, tent, dirFrom(0.36, 1.55), { spin: 2.4, sink: 0.04 }); world.add(tent);

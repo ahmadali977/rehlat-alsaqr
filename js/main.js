@@ -12,8 +12,14 @@ import { state, save, ORDER } from './state.js';
 
 async function boot() {
   initRenderer(document.getElementById('game'));
+  const fill = document.getElementById('boot-fill'), note = document.getElementById('boot-note');
+  const notes = ['جارٍ تجهيز الصاروخ…', 'جارٍ رسم الكواكب…', 'جارٍ إيقاظ الكائنات الفضائية…', 'العدّ التنازلي يقترب…'];
   await Promise.all([document.fonts.load('40px Lalezar'), document.fonts.load('700 30px Baloo'), preloadRocketArt(),
-    loadModels(Object.keys(MODELS))]);
+    loadModels(Object.keys(MODELS), k => {
+      if (fill) fill.style.width = Math.round(6 + k * 90) + '%';
+      if (note) note.textContent = notes[Math.min(notes.length - 1, Math.floor(k * notes.length))];
+    })]);
+  if (fill) fill.style.width = '100%';
   const clock = new THREE.Clock();
   gfx.renderer.setAnimationLoop(() => {
     const real = Math.min(clock.getDelta(), 1 / 20);

@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#120c2e">
 <title>رحلة الصقر</title>
+<meta name="description" content="لعبة تعليمية ثلاثية الأبعاد: انطلق بالصاروخ «الصقر» من صحراء المملكة إلى كواكب المجموعة الشمسية، وأجب عن أسئلة علمية ممتعة على الطريق.">
+<meta property="og:title" content="رحلة الصقر">
+<meta property="og:description" content="مغامرة تعليمية في المجموعة الشمسية — من صحراء المملكة إلى نبتون.">
+<meta property="og:image" content="assets/img/share.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/img/favicon-64.png">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="رحلة الصقر">
+<link rel="preload" href="assets/fonts/Lalezar-Regular.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three/build/three.module.min.js", "three/addons/": "./vendor/three/examples/jsm/" } }
@@ -15,7 +29,18 @@
   <canvas id="game"></canvas>
   <div id="ui"></div>
 </div>
-<div id="boot"><div class="boot-spin"></div></div>
+<div id="boot">
+  <div class="boot-box">
+    <div class="boot-title">رحلة <span>الصقر</span></div>
+    <div class="boot-sub">مغامرة تعليمية في المجموعة الشمسية</div>
+    <div class="boot-bar"><i id="boot-fill"></i></div>
+    <div class="boot-note" id="boot-note">جارٍ تجهيز الصاروخ…</div>
+  </div>
+</div>
+<div id="rotate">
+  <div class="rot-phone"></div>
+  <div class="rot-text">أدِر جهازك بالعرض لتبدأ الرحلة</div>
+</div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

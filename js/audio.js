@@ -1,17 +1,20 @@
 // Music (streamed <audio> with crossfades) + synthesized sound effects (Web Audio).
 export const MUSIC = {
-  title: 'assets/music/title_a.ogg',
+  title: 'assets/music/title_a.mp3',
   space: 'assets/music/space_a.mp3',
   repair: 'assets/music/repair_b.mp3',
   celebrate: 'assets/music/celebrate_a.mp3',
-  finale: 'assets/music/finale_c.ogg',
+  finale: 'assets/music/finale_c.mp3',
 };
 // picks made on music-picker.html override the defaults
-try { const p = JSON.parse(localStorage.getItem('pq.music') || '{}'); for (const k in p) if (MUSIC[k]) MUSIC[k] = 'assets/music/' + p[k]; } catch {}
+try { const p = JSON.parse(localStorage.getItem('pq.music') || '{}'); for (const k in p) if (MUSIC[k]) MUSIC[k] = 'assets/music/' + p[k].replace(/.ogg$/, '.mp3'); } catch {}
 
 const settings = { music: true, sfx: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('pq.audio') || '{}')); } catch {}
-const saveSettings = () => { try { localStorage.setItem('pq.audio', JSON.stringify(settings)); } catch {} };
+// ?mute silences everything for this visit only (used for testing; the saved choice is untouched)
+const MUTED = new URLSearchParams(location.search).has('mute');
+if (MUTED) { settings.music = false; settings.sfx = false; }
+const saveSettings = () => { if (MUTED) return; try { localStorage.setItem('pq.audio', JSON.stringify(settings)); } catch {} };
 
 let ctx = null, master = null, sfxBus = null;
 function ac() {
