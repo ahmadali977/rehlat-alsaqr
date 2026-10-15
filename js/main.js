@@ -9,9 +9,11 @@ import { flight } from './scenes/flight.js';
 import { landing } from './scenes/landing.js';
 import { finale } from './scenes/finale.js';
 import { state, save, ORDER } from './state.js';
+import { governor } from './perf.js';
 
 async function boot() {
   initRenderer(document.getElementById('game'));
+  governor.init(gfx.renderer);
   const fill = document.getElementById('boot-fill'), note = document.getElementById('boot-note');
   const notes = ['جارٍ تجهيز الصاروخ…', 'جارٍ رسم الكواكب…', 'جارٍ إيقاظ الكائنات الفضائية…', 'العدّ التنازلي يقترب…'];
   await Promise.all([document.fonts.load('40px Lalezar'), document.fonts.load('700 30px Baloo'), preloadRocketArt(),
@@ -24,12 +26,13 @@ async function boot() {
   gfx.renderer.setAnimationLoop(() => {
     const real = Math.min(clock.getDelta(), 1 / 20);
     const dt = tick(real);
-    if (app.world) { app.world.update(dt, real); renderFrame(app.world.scene, gfx.camera); }
+    if (app.world) { app.world.update(dt, real); renderFrame(app.world.scene, gfx.camera); governor.frame(); }
   });
   document.getElementById('boot').classList.add('gone');
   // debug: fast-forward game time (used for automated checks)
   window.__ff = sec => { for (let i = 0; i < sec * 30; i++) { const dt = tick(1 / 30); if (app.world) app.world.update(dt, 1 / 30); } if (app.world) renderFrame(app.world.scene, gfx.camera); };
   window.__app = app;
+  window.__gov = governor;
   // debug: save a clean 3D frame (no HTML overlay) through scripts/save-server.mjs
   window.__snap = async name => { renderFrame(app.world.scene, gfx.camera); const url = gfx.renderer.domElement.toDataURL('image/png'); return (await fetch('http://127.0.0.1:8092/?name=' + name, { method: 'POST', body: url })).text(); };
   const dev = new URLSearchParams(location.search);

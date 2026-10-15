@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeNoise, mulberry } from './noise.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { quality, isTouchDevice } from './perf.js';
 
-export const isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+export const isMobile = isTouchDevice; // phones and tablets (iPadOS reports a Mac, so touch points are checked too)
 
 export const gfx = {
   renderer: null, scene: null, camera: null, clock: new THREE.Clock(), envMap: null,
@@ -11,12 +13,12 @@ export const gfx = {
 
 export function initRenderer(canvas) {
   const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.75 : 2));
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.maxPixelRatio));
   r.outputColorSpace = THREE.SRGBColorSpace;
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.05;
   r.shadowMap.enabled = true;
-  r.shadowMap.type = THREE.PCFSoftShadowMap;
+  r.shadowMap.type = isTouchDevice ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; // soft shadows cost several extra samples per pixel
   gfx.renderer = r;
   const pm = new THREE.PMREMGenerator(r);
   gfx.envMap = pm.fromScene(new RoomEnvironment(r), 0.04).texture;
@@ -108,6 +110,7 @@ export function makeStars(count = 2500, radius = 800, opts = {}) {
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
   const pts = new THREE.Points(geo, m); pts.frustumCulled = false; pts.renderOrder = -9;
+  pts.onBeforeRender = r => { m.uniforms.px.value = r.getPixelRatio(); }; // follow resolution changes
   return pts;
 }
 
@@ -117,7 +120,7 @@ export function makePlanet({ radius = 10, detail = 48, seed = 1, heightFn: baseH
   const noise = makeNoise(seed);
   // fine surface bumps everywhere except the flattened pad area at the top
   const heightFn = baseHeight && ((d, nz) => baseHeight(d, nz) + micro * nz.fbm(d.x * 18 + 5, d.y * 18, d.z * 18, 2) * THREE.MathUtils.smoothstep(Math.acos(Math.min(1, d.y)), 0.3, 0.42));
-  const geo = new THREE.IcosahedronGeometry(1, detail);
+  let geo = new THREE.IcosahedronGeometry(1, detail);
   const pos = geo.attributes.position; const n = pos.count;
   const colors = new Float32Array(n * 3); const dir = new THREE.Vector3(); const c = new THREE.Color();
   // cache per-unique-vertex results (icosahedron geometry is non-indexed; many duplicates)
@@ -149,11 +152,14 @@ export function makePlanet({ radius = 10, detail = 48, seed = 1, heightFn: baseH
   if (flat) geo.computeVertexNormals();
   else { // smooth normals across duplicated vertices
     const merged = mergeNormals(geo); geo.setAttribute('normal', merged);
+    // share identical vertices (about 6x fewer to process); no texture on terrain, so the UVs can go
+    geo.deleteAttribute('uv');
+    geo = mergeVertices(geo, 1e-4);
   }
   const material = mat(0xffffff, { vc: true, rough, flat, envI: 0.25 });
   if (surface) addSurfaceDetail(material, surface);
   const mesh = new THREE.Mesh(geo, material);
-  mesh.receiveShadow = true; mesh.castShadow = true;
+  mesh.receiveShadow = true; mesh.castShadow = false; // a sphere barely shadows itself; skipping it saves a whole shadow pass
   const heightAt = d => radius + (heightFn ? heightFn(d.clone().normalize(), noise) : 0);
   return { mesh, radius, noise, heightAt };
 }
@@ -217,14 +223,18 @@ export function dirFrom(fromTopRad, aroundRad) {
 
 // ---------- puffy clouds ----------
 export function makeCloud(rnd, color = 0xffffff, scale = 1) {
+  // all puffs of one cloud in a single mesh (one draw call), no shadow casting
   const g = new THREE.Group(); const m = mat(color, { rough: 0.95, envI: 0.15 });
-  const puffs = 4 + (rnd() * 3 | 0);
+  const puffs = 4 + (rnd() * 3 | 0), parts = [];
   for (let i = 0; i < puffs; i++) {
     const r = (0.35 + rnd() * 0.35) * scale * (i === 0 ? 1.25 : 1);
-    const s = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m);
-    s.position.set((i - puffs / 2) * 0.42 * scale + (rnd() - 0.5) * 0.2, (rnd() * 0.25) * scale, (rnd() - 0.5) * 0.4 * scale);
-    s.scale.y = 0.78; s.castShadow = true; g.add(s);
+    const sg = new THREE.SphereGeometry(r, 16, 12);
+    sg.scale(1, 0.78, 1);
+    sg.translate((i - puffs / 2) * 0.42 * scale + (rnd() - 0.5) * 0.2, (rnd() * 0.25) * scale, (rnd() - 0.5) * 0.4 * scale);
+    parts.push(sg);
   }
+  const mesh = new THREE.Mesh(mergeGeometries(parts, false), m); parts.forEach(p => p.dispose());
+  g.add(mesh);
   return g;
 }
 

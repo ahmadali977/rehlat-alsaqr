@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { gfx } from './gfx.js';
 import { resetLoop, sleep, tween } from './loop.js';
 import { clearUI } from './ui.js';
+import { governor, quality } from './perf.js';
 
 export const app = { world: null, busy: false };
 
@@ -13,13 +14,23 @@ export const fade = {
   in: () => new Promise(r => { fadeEl.style.opacity = '0'; setTimeout(() => { fadeEl.style.pointerEvents = 'none'; r(); }, 580); }),
 };
 
+// Free the GPU memory of a finished world: geometries, materials, their textures, skeletons and shadow maps.
+// (Textures that later worlds reuse are simply uploaded again; the images stay in memory.)
 function dispose(world) {
   if (!world) return;
   world.dispose && world.dispose();
+  const textures = new Set();
   world.scene.traverse(o => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+    if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();
+    if (o.isLight && o.dispose) o.dispose(); // frees the light's shadow map (several MB each)
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      for (const v of Object.values(m)) if (v && v.isTexture) textures.add(v);
+      if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u && u.value && u.value.isTexture) textures.add(u.value);
+      m.dispose();
+    });
   });
+  textures.forEach(t => { if (t !== gfx.envMap) t.dispose(); });
 }
 
 // Switch to a new world: fade out, build, fade in. build() returns the world object.
@@ -28,11 +39,18 @@ export async function switchWorld(build, { keepUI = [] } = {}) {
   resetLoop();
   clearUI(keepUI);
   const old = app.world; app.world = null; dispose(old);
+  gfx.renderer.shadowMap.enabled = quality.shadows; // a slow device may have asked for no shadows
   const w = await build();
   app.world = w;
-  // render one frame before revealing
-  w.update(0.001); gfx.renderer.compile(w.scene, gfx.camera);
+  // compile every shader and upload every texture while the screen is still covered, so nothing hitches later
+  w.update(0.001);
+  const hidden = []; w.scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } }); // hidden things (flame, pilot...) get compiled too
+  gfx.renderer.compile(w.scene, gfx.camera);
+  hidden.forEach(o => { o.visible = false; });
+  w.scene.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) for (const v of Object.values(m)) if (v && v.isTexture) gfx.renderer.initTexture(v); });
+  w.afterCompile && w.afterCompile();
   await sleep(0.05);
+  governor.reset();
   fade.in();
   return w;
 }

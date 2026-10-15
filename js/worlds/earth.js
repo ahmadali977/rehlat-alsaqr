@@ -6,6 +6,7 @@ import { mulberry } from '../noise.js';
 import { makeCam } from '../game.js';
 import { Particles } from '../particles.js';
 import { makePad, makeRock, ROCK_PALETTES, najdiHouse, najdiTower, oasis, falcon } from '../art.js';
+import { mergeStatic } from '../perf.js';
 
 export const EARTH_R = 12;
 const PAD_ANGLE = 0.2;
@@ -64,10 +65,11 @@ export function buildEarthWorld() {
   ocean.receiveShadow = true; scene.add(ocean);
 
   const world = new THREE.Group(); scene.add(world);
+  const statics = [], smallStatics = []; // merged into a few meshes at the end (far fewer draw calls)
 
   // launch pad + rocket
   const pad = makePad({ radius: 1.7, label: 'الصقر', accent: '#0f8a4a' });
-  placeOn(planet, pad, new THREE.Vector3(0, 1, 0), { sink: 0.02 }); world.add(pad);
+  placeOn(planet, pad, new THREE.Vector3(0, 1, 0), { sink: 0.02 }); world.add(pad); statics.push(pad);
   const padTop = pad.position.y + pad.userData.top;
 
   const rocket = buildRocket();
@@ -88,27 +90,31 @@ export function buildEarthWorld() {
     [0.55, -2.0, 'palm4', 1.5], [0.66, 1.45, 'palms', 1.6], [0.62, -1.6, 'palm1', 1.5], [0.38, 3.1, 'palm2', 1.4], [0.6, 2.9, 'palms', 1.7],
     [0.9, 2.1, 'palm3', 1.6], [0.95, -2.3, 'palms', 1.7],
   ];
-  for (const [a, b, k, h] of spots) { const p = model(k, { height: h }); placeOn(planet, p, dirFrom(a, b), { spin: rnd() * 6, sink: 0.05 }); world.add(p); }
+  for (const [a, b, k, h] of spots) { const p = model(k, { height: h }); placeOn(planet, p, dirFrom(a, b), { spin: rnd() * 6, sink: 0.05 }); world.add(p); statics.push(p); }
   // sandstone rocks and desert shrubs
   for (let i = 0; i < 16; i++) {
     const r = makeRock(i, 0.1 + rnd() * 0.22, { ...ROCK_PALETTES.earth, squash: 0.55, detail: 2, craters: 1 });
-    placeOn(planet, r, dirFrom(0.3 + rnd() * 0.55, rnd() * 6.28), { spin: rnd() * 6, sink: 0.03 }); world.add(r);
+    placeOn(planet, r, dirFrom(0.3 + rnd() * 0.55, rnd() * 6.28), { spin: rnd() * 6, sink: 0.03 }); world.add(r); smallStatics.push(r);
   }
   const shrubM = mat('#7d8f45', { rough: 0.9, flat: true }), shrubM2 = mat('#9aa152', { rough: 0.9, flat: true });
   for (let i = 0; i < 34; i++) {
     const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.08 + rnd() * 0.07, 1), i % 3 ? shrubM : shrubM2);
     s.scale.y = 0.65; s.castShadow = true; s.receiveShadow = true;
     let d; do { d = dirFrom(0.3 + rnd() * 0.65, rnd() * 6.28); } while (Math.abs(Math.atan2(d.x, d.z)) < 0.35 && Math.acos(d.y) < 0.5);
-    placeOn(planet, s, d, { sink: 0.02 }); world.add(s);
+    placeOn(planet, s, d, { sink: 0.02 }); world.add(s); smallStatics.push(s);
   }
   // a Najdi mud-brick village on the far side, and an oasis
   const village = [[0.44, 2.75, 'tower', 0], [0.47, 3.05, 'house', 1.0, 0.75, 0.55], [0.43, 3.4, 'house', 0.8, 0.7, 0.5], [0.52, 2.45, 'house', 0.9, 0.65, 0.45], [0.5, 3.75, 'tower', 0]];
   village.forEach(([a, b, kind, w, d, h], i) => {
     const o = kind === 'tower' ? najdiTower(0.3, 1.25 + (i % 2) * 0.25) : najdiHouse(w, d, h, i + 3);
-    placeOn(planet, o, dirFrom(a, b), { sink: 0.05 }); aimAxis(o, new THREE.Vector3(0, EARTH_R + 1, 0), new THREE.Vector3(0, 0, 1)); world.add(o);
+    placeOn(planet, o, dirFrom(a, b), { sink: 0.05 }); aimAxis(o, new THREE.Vector3(0, EARTH_R + 1, 0), new THREE.Vector3(0, 0, 1)); world.add(o); statics.push(o);
   });
-  const pond = oasis(0.75); placeOn(planet, pond, dirFrom(0.47, -2.35), { sink: 0.04 }); world.add(pond);
-  for (const [a, b, k, h] of [[0.43, -2.05, 'palm2', 1.5], [0.54, -2.6, 'palm4', 1.4], [0.5, -2.05, 'palms', 1.6]]) { const p = model(k, { height: h }); placeOn(planet, p, dirFrom(a, b), { spin: rnd() * 6, sink: 0.05 }); world.add(p); }
+  const pond = oasis(0.75); placeOn(planet, pond, dirFrom(0.47, -2.35), { sink: 0.04 }); world.add(pond); smallStatics.push(pond);
+  for (const [a, b, k, h] of [[0.43, -2.05, 'palm2', 1.5], [0.54, -2.6, 'palm4', 1.4], [0.5, -2.05, 'palms', 1.6]]) { const p = model(k, { height: h }); placeOn(planet, p, dirFrom(a, b), { spin: rnd() * 6, sink: 0.05 }); world.add(p); statics.push(p); }
+  mergeStatic(statics, world, { cast: true });
+  mergeStatic(smallStatics, world, { cast: false });
+  // the tower's frame never moves: merge it, keeping the access arms and the lift cage separate (they animate)
+  mergeStatic(tower.children.filter(c => !tower.userData.arms.includes(c) && c !== tower.userData.cage), tower, { cast: true });
   // falcons circling over the launch site
   const birds = [0, 1, 2].map(i => { const f = falcon(1.6 - i * 0.2); f.userData.r = 3.4 + i * 1.0; f.userData.h = EARTH_R + 4.9 + i * 0.55; f.userData.ph = i * 2.1; f.userData.sp = 0.22 - i * 0.03; scene.add(f); return f; });
 

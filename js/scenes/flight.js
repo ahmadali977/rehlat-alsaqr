@@ -67,9 +67,17 @@ function buildSpace(leg) {
   const smoke = new Particles(500); scene.add(smoke.points);
 
   const cam = makeCam(new THREE.Vector3(0.5, 0.3, 13.5), new THREE.Vector3(0.8, 0, 0)); cam.drift = 0.4; cam.snap(); cam.lerp = 0.06;
+  // warm-up: build one of every obstacle, pickup, laser and debris chunk now (under the fade), so their textures,
+  // geometry and shaders are ready and the flight never hitches when the first one appears
+  const warm = new THREE.Group(); warm.position.set(0, -2000, 0); scene.add(warm);
+  for (let i = 0; i < 5; i++) warm.add(makeObstacle(KINDS[(i + leg) % KINDS.length], leg, i));
+  const ws = new THREE.Mesh(starGeo, starMat()); ws.add(glowSprite(0xffd35a, 1.5, 0.55)); warm.add(ws);
+  warm.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+  for (let i = 0; i < 10; i++) { warm.add(makeRock(20 + i, 0.2, { ...ROCK_PALETTES.space, detail: 1 })); warm.add(makeRock(20 + i, 0.2, { ...ROCK_PALETTES.ice, detail: 1 })); }
   let t = 0;
   const w = {
     scene, rocket, rocketPivot, dest, sun, stars, dust, fx, smoke, cam, onUpdate: null, speedK: 1,
+    afterCompile() { warm.visible = false; }, // stays in the scene so it is freed with the world (and keeps its shaders alive)
     update(dt) {
       t += dt;
       stars.material.uniforms.time.value = t;
@@ -101,6 +109,7 @@ function glowTex() {
 
 // ---------------------------------------------------------------- obstacles
 const ROGUE_LOOKS = ['mercury', 'mars', 'venus', 'neptune', 'uranus'];
+const KINDS = ['meteor', 'debris', 'rogue', 'comet'];
 function makeObstacle(kind, leg, i) {
   const g = new THREE.Group(); const body = new THREE.Group(); g.add(body);
   g.userData.kind = kind; g.userData.radius = 1.2;
@@ -143,7 +152,8 @@ const starGeo = (() => {
   const s = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 + Math.PI / 2, r = i % 2 ? 0.17 : 0.38; i ? s.lineTo(Math.cos(a) * r, Math.sin(a) * r) : s.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
   const g = new THREE.ExtrudeGeometry(s, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.05, bevelSegments: 2 }); g.center(); return g;
 })();
-const starMat = () => mat('#ffcc33', { rough: 0.25, metal: 0.5, emissive: 0xffa000, emissiveI: 0.55, envI: 1.4 });
+let _starMat = null; // one shared material for every star pickup
+const starMat = () => _starMat || (_starMat = mat('#ffcc33', { rough: 0.25, metal: 0.5, emissive: 0xffa000, emissiveI: 0.55, envI: 1.4 }));
 
 // ---------------------------------------------------------------- the flight
 export async function flight(leg) {
@@ -156,7 +166,7 @@ export async function flight(leg) {
   const total = (perLeg + 1) * GAP;
   let travelled = 0, mode = 'intro', targetY = 0, vy = 0, damaged = false;
   const obstacles = []; const pickups = []; let nextObstacle = 0, nextStars = 12;
-  const kinds = ['meteor', 'debris', 'rogue', 'comet'];
+  const kinds = KINDS;
 
   // input
   const canvas = gfx.renderer.domElement; const ray = new THREE.Raycaster(); const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); const hit = new THREE.Vector3();
@@ -267,7 +277,7 @@ export async function flight(leg) {
       beam.add(core, glow); beam.position.copy(from).lerp(to, 0.5); beam.lookAt(to); beam.rotateX(Math.PI / 2);
       w.scene.add(beam);
       await tween(0.22, k => { const s = 1 - k; core.material.opacity = s; glow.material.opacity = 0.55 * s; beam.scale.x = beam.scale.z = 1 + k; }, ease.out);
-      w.scene.remove(beam);
+      w.scene.remove(beam); beam.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
       w.fx.emit({ pos: [to.x - 0.8, to.y, 0.3], velSpread: 5, life: 0.4, size: 0.4, sizeEnd: 0, color: 0xbfffd8, colorEnd: 0x3dff9a, count: 14 });
     }
     explode(ob);

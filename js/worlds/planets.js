@@ -9,6 +9,7 @@ import { planetMesh, planetTexture } from '../textures.js';
 import { aimAxis } from './earth.js';
 import { makePad, padTexture, makeRock, ROCK_PALETTES, glowSprite } from '../art.js';
 import { PLANETS } from '../content.js';
+import { mergeStatic } from '../perf.js';
 
 // pad accent colours per world
 const ACCENT = { mercury: '#e0703a', venus: '#d64f8f', mars: '#159a8c', jupiter: '#e07a2f', saturn: '#b8862a', uranus: '#1f9fa6', neptune: '#4f6fe0' };
@@ -153,7 +154,7 @@ export function buildPlanetWorld(id) {
         const size = hMin + rnd() * (hMax - hMin);
         const rockKind = { boulder: { squash: 0.7, detail: 3, craters: 2 }, stone: { squash: 0.6, detail: 2, craters: 1 }, pebble: { squash: 0.55, detail: 1, craters: 0 } }[key];
         const m = rockKind ? makeRock(seedN++, size, { ...pal, ...rockKind }) : model(key, { height: size });
-        if (key === 'pebble' || key === 'stone') m.castShadow = false; // tiny rocks: no shadow pass needed
+        if (key === 'pebble' || key === 'stone') { m.castShadow = false; m.userData.small = true; } // tiny rocks: no shadow pass needed
         if (tint) m.traverse(o => { if (o.isMesh) o.material.color.set(tint); });
         // spread from just outside the pad to the horizon; keep the view line in front of the camera clear of big boulders
         const near = key === 'pebble' ? 0.24 : key === 'stone' ? 0.27 : 0.36;
@@ -165,6 +166,8 @@ export function buildPlanetWorld(id) {
       const st = model('baseA', { height: 0.9 }); placeOn(planet, st, dirFrom(0.5, -2.0), { spin: 1.2, sink: 0.05 }); base.add(st);
       const tw = model('turbine', { height: 1.5 }); placeOn(planet, tw, dirFrom(0.55, 2.0), { spin: 0.4, sink: 0.05 }); base.add(tw);
     }
+    // everything on the ground so far is static: merge it into a few meshes (pebbles and stones without shadows)
+    { const kids = [...base.children]; mergeStatic(kids.filter(k => !k.userData.small), base, { cast: true }); mergeStatic(kids.filter(k => k.userData.small), base, { cast: false }); }
     if (def.lava) { // glowing lava lakes in the volcano craters
       const lavaM = new THREE.MeshStandardMaterial({ color: 0xff7a2a, emissive: 0xff4d0f, emissiveIntensity: 2.4, roughness: 0.5 });
       for (const v of def.volcanoes) {
@@ -299,6 +302,8 @@ function buildSkyStation(scene, def, id, rnd) {
   // deck dressing (kept to the back half)
   const dressing = [['hangarGlass', 1.1, -2.2, -2.4, 0.6], ['solar', 0.9, 2.6, -2.3, -0.5], ['dish', 1.2, -3.0, -0.6, 1.2], ['cargo', 0.7, 3.1, -0.4, 0.2], ['lights', 0.8, 0.4, -3.4, 0]];
   for (const [k, h, px, pz, ry] of dressing) { const m = model(k, { height: h }); m.position.set(px, deckY, pz); m.rotation.y = ry; station.add(m); }
+  // the station's structure never changes shape: merge it (the glowing thrusters stay separate, they pulse)
+  mergeStatic([...station.children], station, { cast: true });
   station.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   glows.forEach(g => { g.castShadow = false; });
 
